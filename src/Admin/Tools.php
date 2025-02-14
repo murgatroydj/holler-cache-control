@@ -37,6 +37,9 @@ class Tools {
 
         // Add cache purging hooks
         $this->add_cache_purging_hooks();
+
+        // Add async cache purge hook
+        add_action('holler_cache_control_async_purge', array($this, 'purge_all_caches'));
     }
 
     /**
@@ -85,22 +88,29 @@ class Tools {
      */
     public function purge_all_caches_on_update() {
         // Skip cache purging during plugin deactivation if it's not our plugin
-        if (isset($_GET['action']) && $_GET['action'] === 'deactivate' && 
-            isset($_GET['plugin']) && strpos($_GET['plugin'], 'holler-cache-control') === false) {
+        if (isset($_GET['action']) && $_GET['action'] === 'deactivate') {
+            if (isset($_GET['plugin']) && strpos($_GET['plugin'], 'holler-cache-control') === false) {
+                return;
+            }
+            
+            // For deactivation, schedule an async task to clear caches
+            wp_schedule_single_event(time(), 'holler_cache_control_async_purge');
             return;
         }
 
+        $this->purge_all_caches();
+    }
+
+    /**
+     * Actually purge all caches
+     */
+    public function purge_all_caches() {
         try {
             $cache_status = $this->get_cache_systems_status();
             
             // Purge Nginx cache first as it's typically fastest
             if ($cache_status['nginx']['active']) {
                 Nginx::purge_cache();
-            }
-
-            // Skip other caches during plugin deactivation
-            if (isset($_GET['action']) && $_GET['action'] === 'deactivate') {
-                return;
             }
 
             // Purge Redis cache
@@ -122,7 +132,6 @@ class Tools {
             $this->purge_elementor_cache();
 
         } catch (\Exception $e) {
-            // Log error but don't block deactivation
             error_log('Cache purge error: ' . $e->getMessage());
         }
     }

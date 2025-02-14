@@ -66,8 +66,16 @@ spl_autoload_register(function ($class) {
  * @since    1.0.0
  */
 function run_holler_cache_control() {
-    $plugin = new HollerCacheControl\Core\Plugin();
-    $plugin->run();
+    // Register activation hook
+    register_activation_hook(__FILE__, function() {
+        // Register our async action if not already registered
+        if (!wp_next_scheduled('holler_cache_control_async_purge')) {
+            wp_schedule_single_event(time(), 'holler_cache_control_async_purge');
+        }
+    });
+
+    // Initialize plugin
+    new HollerCacheControl\Core\Plugin();
 }
 
 run_holler_cache_control();
