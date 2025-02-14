@@ -41,40 +41,48 @@ class Nginx {
                     $url = 'http://127.0.0.1';
                     error_log("Making test request to: " . $url);
                     
-                    // Use cURL to get headers
-                    $ch = curl_init();
-                    curl_setopt($ch, CURLOPT_URL, $url);
-                    curl_setopt($ch, CURLOPT_HEADER, 1);
-                    curl_setopt($ch, CURLOPT_NOBODY, 1);
-                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-                    curl_setopt($ch, CURLOPT_HTTPHEADER, array('Host: ' . $site_host));
+                    // Use WordPress HTTP API
+                    $args = array(
+                        'method' => 'HEAD',
+                        'headers' => array(
+                            'Host' => $site_host,
+                            'X-Test' => '1'
+                        ),
+                        'sslverify' => false
+                    );
                     
-                    $headers = curl_exec($ch);
-                    error_log("Response headers: " . print_r($headers, true));
-                    
-                    if ($headers && strpos($headers, 'X-Grid-SRCache-TTL') !== false) {
-                        error_log("Found X-Grid-SRCache-TTL header");
+                    $response = wp_remote_request($url, $args);
+                    if (!is_wp_error($response)) {
+                        $headers = wp_remote_retrieve_headers($response);
+                        error_log("Response headers: " . print_r($headers, true));
                         
-                        // Get cache TTL from config
-                        preg_match('/set \$cache_ttl (\d+);/', $redis_config, $matches);
-                        $ttl = isset($matches[1]) ? (int)$matches[1] : 2592000;
-                        error_log("Cache TTL from config: " . $ttl);
-                        
-                        $result['active'] = true;
-                        $result['details'] = sprintf(
-                            __('GridPane Redis Page Cache | TTL: %s', 'holler-cache-control'),
-                            human_time_diff(0, $ttl)
-                        );
+                        // Check for GridPane Redis cache headers
+                        if (isset($headers['x-grid-srcache-ttl'])) {
+                            error_log("Found X-Grid-SRCache-TTL header");
+                            
+                            // Get cache TTL from config
+                            preg_match('/set \$cache_ttl (\d+);/', $redis_config, $matches);
+                            $ttl = isset($matches[1]) ? (int)$matches[1] : 2592000;
+                            error_log("Cache TTL from config: " . $ttl);
+                            
+                            $result['active'] = true;
+                            $result['details'] = sprintf(
+                                __('GridPane Redis Page Cache | TTL: %s', 'holler-cache-control'),
+                                human_time_diff(0, $ttl)
+                            );
 
-                        // Add note about being logged in
-                        if (is_user_logged_in()) {
-                            $result['details'] .= ' ' . __('(Cache bypassed while logged in)', 'holler-cache-control');
+                            // Add note about being logged in
+                            if (is_user_logged_in()) {
+                                $result['details'] .= ' ' . __('(Cache bypassed while logged in)', 'holler-cache-control');
+                            }
+                            
+                            error_log("Cache status: active");
+                            return $result;
+                        } else {
+                            error_log("X-Grid-SRCache-TTL header not found");
                         }
-                        
-                        error_log("Cache status: active");
-                        return $result;
                     } else {
-                        error_log("X-Grid-SRCache-TTL header not found");
+                        error_log("WP HTTP request error: " . $response->get_error_message());
                     }
                 } catch (\Exception $e) {
                     error_log('GridPane Redis Page Cache error: ' . $e->getMessage());
