@@ -177,42 +177,6 @@ jQuery(document).ready(function($) {
         purgeCache(cacheType, $(this));
     });
 
-    // Update cache status periodically
-    function updateCacheStatus() {
-        $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {
-                action: 'holler_cache_status',
-                _ajax_nonce: hollerCacheControl.nonces.status
-            },
-            success: function(response) {
-                if (response.success) {
-                    updateStatusDisplay(response.data);
-                }
-            },
-            complete: function() {
-                setTimeout(updateCacheStatus, 30000); // Update every 30 seconds
-            }
-        });
-    }
-
-    // Update status display
-    function updateStatusDisplay(statuses) {
-        Object.keys(statuses).forEach(function(type) {
-            var status = statuses[type];
-            var $statusElement = $('#holler-' + type + '-status');
-            if ($statusElement.length) {
-                $statusElement.html(status.active ? '✅' : '❌');
-            }
-        });
-    }
-
-    // Start status updates if we're on the admin page
-    if ($('.holler-cache-control-wrap').length) {
-        updateCacheStatus();
-    }
-
     // Purge cache function
     function purgeCache(cacheType, $button) {
         console.log('Purging cache:', cacheType);
@@ -220,7 +184,9 @@ jQuery(document).ready(function($) {
         $button.prop('disabled', true).text(hollerCacheControl.i18n.purging);
 
         // Get the correct nonce based on cache type
-        const nonce = hollerCacheControl.nonces[cacheType.replace('-', '_')];
+        const nonceKey = cacheType.replace('-', '_');
+        const nonce = hollerCacheControl.nonces[nonceKey];
+        
         if (!nonce) {
             console.error('No nonce found for cache type:', cacheType);
             showNotice('Error: Invalid cache type', 'error');
@@ -234,7 +200,7 @@ jQuery(document).ready(function($) {
             data: {
                 action: 'holler_purge_' + cacheType,
                 type: cacheType,
-                _ajax_nonce: nonce
+                _wpnonce: nonce
             },
             success: function(response) {
                 console.log('Purge response:', response);
@@ -250,12 +216,14 @@ jQuery(document).ready(function($) {
             },
             complete: function() {
                 $button.prop('disabled', false).text(originalText);
-                updateCacheStatus(); // Update status after purge
+                if (typeof updateCacheStatus === 'function') {
+                    updateCacheStatus();
+                }
             }
         });
     }
 
-    // Show admin notice
+    // Show notice
     function showNotice(message, type) {
         console.log('Showing notice:', message, type);
         var notice = $('<div class="notice notice-' + type + ' is-dismissible"><p>' + message + '</p></div>');
@@ -287,6 +255,37 @@ jQuery(document).ready(function($) {
         setTimeout(function() {
             notice.fadeOut(300, function() { $(this).remove(); });
         }, 5000);
+    }
+
+    // Update cache status if on admin page
+    if ($('.holler-cache-control-wrap').length) {
+        function updateCacheStatus() {
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'holler_cache_status',
+                    _wpnonce: hollerCacheControl.nonces.status
+                },
+                success: function(response) {
+                    if (response.success) {
+                        Object.keys(response.data).forEach(function(type) {
+                            var status = response.data[type];
+                            var $statusElement = $('#holler-' + type + '-status');
+                            if ($statusElement.length) {
+                                $statusElement.html(status.active ? '✅' : '❌');
+                            }
+                        });
+                    }
+                }
+            });
+        }
+        
+        // Initial update
+        updateCacheStatus();
+        
+        // Update every 30 seconds
+        setInterval(updateCacheStatus, 30000);
     }
 
     // Purge all caches function

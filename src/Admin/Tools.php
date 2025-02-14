@@ -32,20 +32,22 @@ class Tools {
             add_action('wp_footer', array($this, 'add_notice_container'));
         }
 
+        // Add admin bar menu
+        add_action('admin_bar_menu', array($this, 'admin_bar_menu'), 100);
+
+        // Register AJAX handlers
+        add_action('wp_ajax_holler_cache_status', array($this, 'handle_cache_status'));
+        add_action('wp_ajax_holler_purge_all', array($this, 'handle_purge_cache'));
+        add_action('wp_ajax_holler_purge_nginx', array($this, 'handle_purge_cache'));
+        add_action('wp_ajax_holler_purge_redis', array($this, 'handle_purge_cache'));
+        add_action('wp_ajax_holler_purge_cloudflare', array($this, 'handle_purge_cache'));
+        add_action('wp_ajax_holler_purge_cloudflare_apo', array($this, 'handle_purge_cache'));
+
         // Add async cache purge hook
         add_action('holler_cache_control_async_purge', array($this, 'purge_all_caches'));
 
-        // Add admin bar menu with high priority to ensure it runs after other plugins
-        add_action('wp_before_admin_bar_render', array($this, 'remove_original_buttons'), 999);
-        add_action('admin_bar_menu', array($this, 'admin_bar_menu'), 100);
-
         // Register settings
         add_action('admin_init', array($this, 'register_settings'));
-
-        // Register AJAX handlers
-        add_action('wp_ajax_holler_cache_control_purge', array($this, 'handle_purge_cache'));
-        add_action('wp_ajax_holler_cache_control_status', array($this, 'handle_cache_status'));
-        add_action('wp_ajax_holler_purge_nginx_cache', array($this, 'purge_nginx_cache'));
 
         // Add cache purging hooks
         $this->add_cache_purging_hooks();
@@ -566,6 +568,8 @@ class Tools {
      * Handle AJAX request to purge cache
      */
     public function handle_purge_cache() {
+        check_ajax_referer('holler_purge_' . $_POST['type']);
+
         if (!current_user_can('manage_options')) {
             wp_send_json_error(__('You do not have permission to perform this action.', 'holler-cache-control'));
             return;
@@ -577,26 +581,20 @@ class Tools {
         }
 
         $type = sanitize_text_field($_POST['type']);
-        
-        // Verify nonce
-        if (!check_ajax_referer('holler_purge_' . $type, '_ajax_nonce', false)) {
-            wp_send_json_error(__('Invalid security token.', 'holler-cache-control'));
-            return;
-        }
-
-        $results = array();
-        $success = true;
-        $messages = array();
+        $result = array('success' => false, 'message' => '');
 
         // If type is 'all', purge all caches
         if ($type === 'all') {
             $caches = array('nginx', 'redis', 'cloudflare', 'cloudflare-apo');
+            $success = true;
+            $messages = array();
+
             foreach ($caches as $cache_type) {
-                $result = $this->purge_single_cache($cache_type);
-                if (!empty($result['message'])) {
-                    $messages[] = $result['message'];
+                $cache_result = $this->purge_single_cache($cache_type);
+                if (!empty($cache_result['message'])) {
+                    $messages[] = $cache_result['message'];
                 }
-                if (!$result['success']) {
+                if (!$cache_result['success']) {
                     $success = false;
                 }
             }
