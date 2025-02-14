@@ -16,21 +16,17 @@ class Tools {
     private $plugin_name;
     private $version;
 
-    public function __construct($plugin_name = 'holler-cache-control', $version = '1.0.0') {
+    public function __construct($plugin_name, $version) {
         $this->plugin_name = $plugin_name;
         $this->version = $version;
 
         // Initialize admin hooks
-        add_action('admin_init', array($this, 'admin_init'));
         add_action('admin_menu', array($this, 'add_plugin_admin_menu'));
         add_action('admin_enqueue_scripts', array($this, 'enqueue_styles'));
         add_action('admin_enqueue_scripts', array($this, 'enqueue_scripts'));
 
         // Initialize front-end hooks if admin bar is showing
-        if (!is_admin() && is_admin_bar_showing()) {
-            add_action('wp_enqueue_scripts', array($this, 'enqueue_scripts'));
-            add_action('wp_footer', array($this, 'add_notice_container'));
-        }
+        add_action('init', array($this, 'init_front_end'));
 
         // Add admin bar menu
         add_action('admin_bar_menu', array($this, 'admin_bar_menu'), 100);
@@ -51,6 +47,16 @@ class Tools {
 
         // Add cache purging hooks
         $this->add_cache_purging_hooks();
+    }
+
+    /**
+     * Initialize front-end functionality if admin bar is showing
+     */
+    public function init_front_end() {
+        if (!is_admin() && is_admin_bar_showing()) {
+            add_action('wp_enqueue_scripts', array($this, 'enqueue_scripts'));
+            add_action('wp_footer', array($this, 'add_notice_container'));
+        }
     }
 
     /**
