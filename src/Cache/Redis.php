@@ -43,19 +43,27 @@ class Redis {
         );
 
         // Check if Redis Object Cache plugin is installed and active
-        if (!class_exists('Redis_Object_Cache')) {
-            $result['details'] = __('Redis Object Cache plugin not installed', 'holler-cache-control');
+        if (!is_plugin_active('redis-cache/redis-cache.php')) {
+            $result['details'] = __('Redis Object Cache plugin not active', 'holler-cache-control');
             return $result;
         }
 
         // Check if Redis is enabled in GridPane
-        // GridPane uses wp-redis/object-cache.php when Redis is enabled
-        if (!file_exists(WP_CONTENT_DIR . '/object-cache.php')) {
+        $object_cache_file = WP_CONTENT_DIR . '/object-cache.php';
+        $redis_cache_file = WP_CONTENT_DIR . '/plugins/redis-cache/includes/object-cache.php';
+        
+        if (!file_exists($object_cache_file) || !file_exists($redis_cache_file)) {
             $result['details'] = __('Redis Object Cache is disabled in GridPane', 'holler-cache-control');
             return $result;
         }
 
-        // Check if Redis server is running and accessible
+        // Check if the object-cache.php is actually the Redis one
+        if (md5_file($object_cache_file) !== md5_file($redis_cache_file)) {
+            $result['details'] = __('Redis Object Cache is disabled in GridPane', 'holler-cache-control');
+            return $result;
+        }
+
+        // Now check if Redis server is running and accessible
         try {
             $redis = new \Redis();
             $redis->connect('127.0.0.1', 6379);
@@ -67,7 +75,7 @@ class Redis {
                     // Final check - verify Redis is actually being used
                     global $wp_object_cache;
                     if (!$wp_object_cache || !method_exists($wp_object_cache, 'redis_status') || !$wp_object_cache->redis_status()) {
-                        $result['details'] = __('Redis Object Cache is disabled in GridPane', 'holler-cache-control');
+                        $result['details'] = __('Redis Object Cache is not connected', 'holler-cache-control');
                         return $result;
                     }
 

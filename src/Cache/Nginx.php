@@ -20,12 +20,21 @@ class Nginx {
         );
 
         // Check for Nginx Helper plugin which GridPane requires for page caching
-        if (!class_exists('Nginx_Helper')) {
-            $result['details'] = __('Nginx Helper plugin not installed', 'holler-cache-control');
+        if (!is_plugin_active('nginx-helper/nginx-helper.php')) {
+            $result['details'] = __('Nginx Helper plugin not active', 'holler-cache-control');
             return $result;
         }
 
-        // Check if any page caching is enabled in GridPane
+        // Get Nginx Helper settings
+        $options = get_option('rt_wp_nginx_helper_options', array());
+        
+        // Check if purging is enabled in Nginx Helper
+        if (!isset($options['enable_purge']) || $options['enable_purge'] != 1) {
+            $result['details'] = __('Cache purging not enabled in Nginx Helper', 'holler-cache-control');
+            return $result;
+        }
+
+        // GridPane specific paths
         $cache_path = '/var/cache/nginx';
         $redis_conf = '/etc/nginx/conf.d/redis.conf';
         
@@ -45,8 +54,10 @@ class Nginx {
             } catch (\Exception $e) {
                 error_log('GridPane Redis Page Cache error: ' . $e->getMessage());
             }
-        } elseif (is_dir($cache_path)) {
-            // FastCGI Page Cache is enabled
+        }
+        
+        // Check FastCGI cache path and nginx.conf
+        if (is_dir($cache_path)) {
             try {
                 $size = self::get_directory_size($cache_path);
                 $result['active'] = true;
@@ -76,8 +87,8 @@ class Nginx {
         );
 
         // Check for Nginx Helper plugin
-        if (!class_exists('Nginx_Helper')) {
-            $result['message'] = __('Nginx Helper plugin not installed', 'holler-cache-control');
+        if (!is_plugin_active('nginx-helper/nginx-helper.php')) {
+            $result['message'] = __('Nginx Helper plugin not active', 'holler-cache-control');
             return $result;
         }
 
