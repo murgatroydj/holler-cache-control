@@ -19,20 +19,24 @@ class Nginx {
             'details' => ''
         );
 
-        error_log("Checking page cache status");
+        error_log("========= Starting cache detection =========");
         
         // Check if FastCGI caching is enabled first by checking config
         $site_host = parse_url(home_url(), PHP_URL_HOST);
         $nginx_wpfc_conf = "/etc/nginx/common/{$site_host}-wpfc.conf";
         
+        error_log("Checking FastCGI config at: " . $nginx_wpfc_conf);
+        
         // First check if FastCGI is configured
         if (file_exists($nginx_wpfc_conf)) {
-            error_log("FastCGI config exists at: " . $nginx_wpfc_conf);
+            error_log("FastCGI config exists");
             
             // Check if FastCGI is actually enabled by looking for FASTCGICACHE directive
             $config_content = file_get_contents($nginx_wpfc_conf);
+            error_log("Config content: " . $config_content);
+            
             if ($config_content && strpos($config_content, 'fastcgi_cache FASTCGICACHE;') !== false) {
-                error_log("FastCGI cache is enabled");
+                error_log("Found FastCGI cache directive");
                 
                 // Make a test request to check headers
                 $url = home_url('/');
@@ -71,9 +75,17 @@ class Nginx {
                         
                         error_log("Cache status: active (FastCGI)");
                         return $result;
+                    } else {
+                        error_log("No GridPane cache headers found in response");
                     }
+                } else {
+                    error_log("Error making test request: " . $response->get_error_message());
                 }
+            } else {
+                error_log("FastCGI cache directive not found in config");
             }
+        } else {
+            error_log("FastCGI config file not found");
         }
         
         // If no FastCGI cache, check for Redis
@@ -127,8 +139,14 @@ class Nginx {
                         
                         error_log("Cache status: active (Redis)");
                         return $result;
+                    } else {
+                        error_log("No GridPane Redis cache headers found in response");
                     }
+                } else {
+                    error_log("Error making test request: " . $response->get_error_message());
                 }
+            } else {
+                error_log("Could not connect to Redis");
             }
         } catch (\Exception $e) {
             error_log('GridPane Redis Page Cache error: ' . $e->getMessage());
