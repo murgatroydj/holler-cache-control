@@ -38,7 +38,7 @@ class Nginx {
                 error_log("Found Redis cache directives in config");
                 try {
                     // Make a test request to check headers
-                    $url = home_url();
+                    $url = 'http://127.0.0.1';
                     error_log("Making test request to: " . $url);
                     
                     // Use cURL to get headers
@@ -47,8 +47,7 @@ class Nginx {
                     curl_setopt($ch, CURLOPT_HEADER, 1);
                     curl_setopt($ch, CURLOPT_NOBODY, 1);
                     curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-                    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-                    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+                    curl_setopt($ch, CURLOPT_HTTPHEADER, array('Host: ' . $site_host));
                     
                     $headers = curl_exec($ch);
                     error_log("Response headers: " . print_r($headers, true));
