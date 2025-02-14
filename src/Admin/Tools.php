@@ -461,47 +461,79 @@ class Tools {
      * Handle AJAX request to purge cache
      */
     public function handle_purge_cache() {
-        check_ajax_referer('holler_cache_control_nonce', 'nonce');
-
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error(__('Insufficient permissions', 'holler-cache-control'));
-            return;
-        }
-
-        $cache_type = isset($_POST['cache_type']) ? sanitize_text_field($_POST['cache_type']) : '';
-        if (empty($cache_type)) {
-            wp_send_json_error(__('No cache type specified', 'holler-cache-control'));
-            return;
-        }
-
-        $cache_status = $this->get_cache_systems_status();
-        $results = array();
-
         try {
+            check_ajax_referer('holler_cache_control_nonce', 'nonce');
+
+            if (!current_user_can('manage_options')) {
+                wp_send_json_error(__('Insufficient permissions', 'holler-cache-control'));
+                return;
+            }
+
+            $cache_type = isset($_POST['cache_type']) ? sanitize_text_field($_POST['cache_type']) : '';
+            if (empty($cache_type)) {
+                wp_send_json_error(__('No cache type specified', 'holler-cache-control'));
+                return;
+            }
+
+            $cache_status = $this->get_cache_systems_status();
+            $results = array();
+
             // Handle purge all caches
             if ($cache_type === 'all') {
                 // Purge Nginx cache if active
                 if ($cache_status['nginx']['active']) {
-                    $result = Nginx::purge_cache();
-                    $results['nginx'] = $result;
+                    try {
+                        $result = Nginx::purge_cache();
+                        $results['nginx'] = $result;
+                    } catch (\Exception $e) {
+                        error_log('Nginx cache purge error: ' . $e->getMessage());
+                        $results['nginx'] = array(
+                            'success' => false,
+                            'message' => $e->getMessage()
+                        );
+                    }
                 }
 
                 // Purge Redis cache if active
                 if ($cache_status['redis']['active']) {
-                    $result = Redis::purge_cache();
-                    $results['redis'] = $result;
+                    try {
+                        $result = Redis::purge_cache();
+                        $results['redis'] = $result;
+                    } catch (\Exception $e) {
+                        error_log('Redis cache purge error: ' . $e->getMessage());
+                        $results['redis'] = array(
+                            'success' => false,
+                            'message' => $e->getMessage()
+                        );
+                    }
                 }
 
                 // Purge Cloudflare cache if active
                 if ($cache_status['cloudflare']['active']) {
-                    $result = Cloudflare::purge_cache();
-                    $results['cloudflare'] = $result;
+                    try {
+                        $result = Cloudflare::purge_cache();
+                        $results['cloudflare'] = $result;
+                    } catch (\Exception $e) {
+                        error_log('Cloudflare cache purge error: ' . $e->getMessage());
+                        $results['cloudflare'] = array(
+                            'success' => false,
+                            'message' => $e->getMessage()
+                        );
+                    }
                 }
 
                 // Purge Cloudflare APO cache if active
                 if ($cache_status['cloudflare-apo']['active']) {
-                    $result = CloudflareAPO::purge_cache();
-                    $results['cloudflare-apo'] = $result;
+                    try {
+                        $result = CloudflareAPO::purge_cache();
+                        $results['cloudflare-apo'] = $result;
+                    } catch (\Exception $e) {
+                        error_log('Cloudflare APO cache purge error: ' . $e->getMessage());
+                        $results['cloudflare-apo'] = array(
+                            'success' => false,
+                            'message' => $e->getMessage()
+                        );
+                    }
                 }
 
             } else {
@@ -509,22 +541,54 @@ class Tools {
                 switch ($cache_type) {
                     case 'nginx':
                         if ($cache_status['nginx']['active']) {
-                            $results['nginx'] = Nginx::purge_cache();
+                            try {
+                                $results['nginx'] = Nginx::purge_cache();
+                            } catch (\Exception $e) {
+                                error_log('Nginx cache purge error: ' . $e->getMessage());
+                                $results['nginx'] = array(
+                                    'success' => false,
+                                    'message' => $e->getMessage()
+                                );
+                            }
                         }
                         break;
                     case 'redis':
                         if ($cache_status['redis']['active']) {
-                            $results['redis'] = Redis::purge_cache();
+                            try {
+                                $results['redis'] = Redis::purge_cache();
+                            } catch (\Exception $e) {
+                                error_log('Redis cache purge error: ' . $e->getMessage());
+                                $results['redis'] = array(
+                                    'success' => false,
+                                    'message' => $e->getMessage()
+                                );
+                            }
                         }
                         break;
                     case 'cloudflare':
                         if ($cache_status['cloudflare']['active']) {
-                            $results['cloudflare'] = Cloudflare::purge_cache();
+                            try {
+                                $results['cloudflare'] = Cloudflare::purge_cache();
+                            } catch (\Exception $e) {
+                                error_log('Cloudflare cache purge error: ' . $e->getMessage());
+                                $results['cloudflare'] = array(
+                                    'success' => false,
+                                    'message' => $e->getMessage()
+                                );
+                            }
                         }
                         break;
                     case 'cloudflare-apo':
                         if ($cache_status['cloudflare-apo']['active']) {
-                            $results['cloudflare-apo'] = CloudflareAPO::purge_cache();
+                            try {
+                                $results['cloudflare-apo'] = CloudflareAPO::purge_cache();
+                            } catch (\Exception $e) {
+                                error_log('Cloudflare APO cache purge error: ' . $e->getMessage());
+                                $results['cloudflare-apo'] = array(
+                                    'success' => false,
+                                    'message' => $e->getMessage()
+                                );
+                            }
                         }
                         break;
                     default:
@@ -542,6 +606,7 @@ class Tools {
             }
 
             if (!empty($errors)) {
+                error_log('Cache purge errors: ' . implode(', ', $errors));
                 wp_send_json_error(implode(', ', $errors));
                 return;
             }
@@ -549,6 +614,7 @@ class Tools {
             wp_send_json_success(__('Cache purged successfully', 'holler-cache-control'));
 
         } catch (\Exception $e) {
+            error_log('Cache purge fatal error: ' . $e->getMessage());
             wp_send_json_error($e->getMessage());
         }
     }
