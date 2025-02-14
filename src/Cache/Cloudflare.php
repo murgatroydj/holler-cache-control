@@ -208,11 +208,15 @@ class Cloudflare {
                 );
             }
             
+            // Store the current page's result count before cleanup
+            $current_page_count = count($data['result']);
+            
             // Free up memory
             unset($data);
             unset($body);
             
-            if (count($data['result']) < $per_page) {
+            // Check if we've received fewer results than requested (last page)
+            if ($current_page_count < $per_page) {
                 break;
             }
             
@@ -233,6 +237,10 @@ class Cloudflare {
      */
     public static function get_zone_id($domain) {
         $zones = self::get_zone_data();
+        
+        if (empty($zones)) {
+            return null;
+        }
         
         foreach ($zones as $zone) {
             if ($zone['name'] === $domain && $zone['status'] === 'active') {
