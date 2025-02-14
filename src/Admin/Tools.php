@@ -458,114 +458,98 @@ class Tools {
     }
 
     /**
-     * Handle AJAX request for cache purging
+     * Handle AJAX request to purge cache
      */
     public function handle_purge_cache() {
         check_ajax_referer('holler_cache_control_nonce', 'nonce');
 
         if (!current_user_can('manage_options')) {
-            wp_send_json_error('Unauthorized');
+            wp_send_json_error(__('Insufficient permissions', 'holler-cache-control'));
+            return;
         }
 
         $cache_type = isset($_POST['cache_type']) ? sanitize_text_field($_POST['cache_type']) : '';
-        $success_messages = array();
-        $error_messages = array();
+        if (empty($cache_type)) {
+            wp_send_json_error(__('No cache type specified', 'holler-cache-control'));
+            return;
+        }
 
-        // Get current cache systems status
-        $cache_status = self::get_cache_systems_status();
+        $cache_status = $this->get_cache_systems_status();
+        $results = array();
 
-        // Handle purge all caches
-        if ($cache_type === 'all') {
-            // Purge Nginx cache if active
-            if ($cache_status['nginx']['active']) {
-                $result = Nginx::purge_cache();
-                if ($result['success']) {
-                    $success_messages[] = __('Nginx Cache cleared', 'holler-cache-control');
-                } else {
-                    $error_messages[] = $result['message'];
+        try {
+            // Handle purge all caches
+            if ($cache_type === 'all') {
+                // Purge Nginx cache if active
+                if ($cache_status['nginx']['active']) {
+                    $result = Nginx::purge_cache();
+                    $results['nginx'] = $result;
                 }
-            }
 
-            // Purge Redis cache if active
-            if ($cache_status['redis']['active']) {
-                $result = Redis::purge_cache();
-                if ($result['success']) {
-                    $success_messages[] = __('Redis Object Cache cleared', 'holler-cache-control');
-                } else {
-                    $error_messages[] = $result['message'];
+                // Purge Redis cache if active
+                if ($cache_status['redis']['active']) {
+                    $result = Redis::purge_cache();
+                    $results['redis'] = $result;
                 }
-            }
 
-            // Purge Cloudflare cache if active
-            if ($cache_status['cloudflare']['active']) {
-                $result = Cloudflare::purge_cache();
-                if ($result['success']) {
-                    $success_messages[] = __('Cloudflare Cache purged successfully', 'holler-cache-control');
-                } else {
-                    $error_messages[] = $result['message'];
+                // Purge Cloudflare cache if active
+                if ($cache_status['cloudflare']['active']) {
+                    $result = Cloudflare::purge_cache();
+                    $results['cloudflare'] = $result;
                 }
-            }
 
-            // Purge Cloudflare APO cache if active
-            if ($cache_status['cloudflare-apo']['active']) {
-                $result = CloudflareAPO::purge_cache();
-                if ($result['success']) {
-                    $success_messages[] = $result['message'];
-                } else {
-                    $error_messages[] = $result['message'];
+                // Purge Cloudflare APO cache if active
+                if ($cache_status['cloudflare-apo']['active']) {
+                    $result = CloudflareAPO::purge_cache();
+                    $results['cloudflare-apo'] = $result;
                 }
-            }
 
-            if (!empty($error_messages)) {
-                wp_send_json_error(implode(', ', $error_messages));
             } else {
-                wp_send_json_success(implode(', ', $success_messages));
-            }
-            
-        } else {
-            // Handle individual cache purge
-            $result = array('success' => false, 'message' => __('Invalid cache type', 'holler-cache-control'));
-            
-            // Check if the requested cache type is active before purging
-            switch ($cache_type) {
-                case 'nginx':
-                    if ($cache_status['nginx']['active']) {
-                        $result = Nginx::purge_cache();
-                    } else {
-                        $result = array('success' => false, 'message' => __('Nginx cache is not active', 'holler-cache-control'));
-                    }
-                    break;
-
-                case 'redis':
-                    if ($cache_status['redis']['active']) {
-                        $result = Redis::purge_cache();
-                    } else {
-                        $result = array('success' => false, 'message' => __('Redis cache is not active', 'holler-cache-control'));
-                    }
-                    break;
-
-                case 'cloudflare':
-                    if ($cache_status['cloudflare']['active']) {
-                        $result = Cloudflare::purge_cache();
-                    } else {
-                        $result = array('success' => false, 'message' => __('Cloudflare cache is not active', 'holler-cache-control'));
-                    }
-                    break;
-
-                case 'cloudflare-apo':
-                    if ($cache_status['cloudflare-apo']['active']) {
-                        $result = CloudflareAPO::purge_cache();
-                    } else {
-                        $result = array('success' => false, 'message' => __('Cloudflare APO is not active', 'holler-cache-control'));
-                    }
-                    break;
+                // Handle individual cache type
+                switch ($cache_type) {
+                    case 'nginx':
+                        if ($cache_status['nginx']['active']) {
+                            $results['nginx'] = Nginx::purge_cache();
+                        }
+                        break;
+                    case 'redis':
+                        if ($cache_status['redis']['active']) {
+                            $results['redis'] = Redis::purge_cache();
+                        }
+                        break;
+                    case 'cloudflare':
+                        if ($cache_status['cloudflare']['active']) {
+                            $results['cloudflare'] = Cloudflare::purge_cache();
+                        }
+                        break;
+                    case 'cloudflare-apo':
+                        if ($cache_status['cloudflare-apo']['active']) {
+                            $results['cloudflare-apo'] = CloudflareAPO::purge_cache();
+                        }
+                        break;
+                    default:
+                        wp_send_json_error(__('Invalid cache type', 'holler-cache-control'));
+                        return;
+                }
             }
 
-            if ($result['success']) {
-                wp_send_json_success($result['message']);
-            } else {
-                wp_send_json_error($result['message']);
+            // Check for any errors
+            $errors = array();
+            foreach ($results as $cache => $result) {
+                if (!$result['success']) {
+                    $errors[] = $cache . ': ' . $result['message'];
+                }
             }
+
+            if (!empty($errors)) {
+                wp_send_json_error(implode(', ', $errors));
+                return;
+            }
+
+            wp_send_json_success(__('Cache purged successfully', 'holler-cache-control'));
+
+        } catch (\Exception $e) {
+            wp_send_json_error($e->getMessage());
         }
     }
 
