@@ -41,14 +41,42 @@ class Nginx {
     }
 
     /**
-     * Purge Nginx cache
-     *
-     * @return array
+     * Purge the Nginx cache
      */
     public static function purge_cache() {
-        return array(
-            'success' => true,
-            'message' => __('Nginx cache purged successfully', 'holler-cache-control')
+        $result = array(
+            'success' => false,
+            'message' => ''
         );
+
+        $cache_path = self::get_cache_path();
+        if (empty($cache_path)) {
+            $result['message'] = 'Cache path not found';
+            return $result;
+        }
+
+        if (!is_dir($cache_path)) {
+            $result['message'] = 'Cache directory does not exist';
+            return $result;
+        }
+
+        if (function_exists('shell_exec')) {
+            @shell_exec('rm -rf ' . escapeshellarg($cache_path . '/*'));
+            $result['success'] = true;
+        } else {
+            $files = glob($cache_path . '/*');
+            if ($files !== false) {
+                foreach ($files as $file) {
+                    if (is_file($file)) {
+                        @unlink($file);
+                    }
+                }
+                $result['success'] = true;
+            } else {
+                $result['message'] = 'Failed to list cache files';
+            }
+        }
+
+        return $result;
     }
 }

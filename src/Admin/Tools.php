@@ -132,7 +132,7 @@ class Tools {
             if ($cache_status['nginx']['active']) {
                 $nginx_result = Nginx::purge_cache();
                 if (!$nginx_result['success']) {
-                    error_log('Nginx cache purge failed: ' . $nginx_result['message']);
+                    throw new \Exception($nginx_result['message']);
                 }
             }
 
@@ -140,7 +140,7 @@ class Tools {
             if ($cache_status['redis']['active']) {
                 $redis_result = Redis::purge_cache();
                 if (!$redis_result['success']) {
-                    error_log('Redis cache purge failed: ' . $redis_result['message']);
+                    throw new \Exception($redis_result['message']);
                 }
             }
 
@@ -148,7 +148,7 @@ class Tools {
             if ($cache_status['cloudflare']['active']) {
                 $cloudflare_result = Cloudflare::purge_cache();
                 if (!$cloudflare_result['success']) {
-                    error_log('Cloudflare cache purge failed: ' . $cloudflare_result['message']);
+                    throw new \Exception($cloudflare_result['message']);
                 }
             }
 
@@ -156,7 +156,7 @@ class Tools {
             if ($cache_status['cloudflare-apo']['active']) {
                 $cloudflare_apo_result = CloudflareAPO::purge_cache();
                 if (!$cloudflare_apo_result['success']) {
-                    error_log('Cloudflare APO cache purge failed: ' . $cloudflare_apo_result['message']);
+                    throw new \Exception($cloudflare_apo_result['message']);
                 }
             }
         } catch (\Exception $e) {
@@ -175,37 +175,33 @@ class Tools {
             return;
         }
 
-        try {
-            // Clear Elementor's CSS cache
-            $uploads_dir = wp_upload_dir();
-            $elementor_css_dir = $uploads_dir['basedir'] . '/elementor/css';
-            
-            if (is_dir($elementor_css_dir)) {
-                // Use shell commands for efficient directory cleanup
-                if (function_exists('shell_exec')) {
-                    // Remove min directory completely
-                    $min_dir = $elementor_css_dir . '/min';
-                    if (is_dir($min_dir)) {
-                        @shell_exec('rm -rf ' . escapeshellarg($min_dir));
-                    }
-                    
-                    // Remove all files in css directory but keep the directory itself
-                    @shell_exec('find ' . escapeshellarg($elementor_css_dir) . ' -type f -delete');
-                } else {
-                    // Fallback to PHP methods if shell_exec is not available
-                    $this->delete_directory_contents($elementor_css_dir);
+        // Clear Elementor's CSS cache
+        $uploads_dir = wp_upload_dir();
+        $elementor_css_dir = $uploads_dir['basedir'] . '/elementor/css';
+        
+        if (is_dir($elementor_css_dir)) {
+            // Use shell commands for efficient directory cleanup
+            if (function_exists('shell_exec')) {
+                // Remove min directory completely
+                $min_dir = $elementor_css_dir . '/min';
+                if (is_dir($min_dir)) {
+                    @shell_exec('rm -rf ' . escapeshellarg($min_dir));
                 }
+                
+                // Remove all files in css directory but keep the directory itself
+                @shell_exec('find ' . escapeshellarg($elementor_css_dir) . ' -type f -delete');
+            } else {
+                // Fallback to PHP methods if shell_exec is not available
+                $this->delete_directory_contents($elementor_css_dir);
             }
+        }
 
-            // Clear Elementor's data cache
-            if (method_exists('\Elementor\Plugin', 'instance')) {
-                // Prevent Elementor from handling files directly
-                remove_action('elementor/core/files/clear_cache', array(\Elementor\Plugin::instance()->files_manager, 'clear_cache'));
-                // Clear other Elementor caches
-                \Elementor\Plugin::instance()->files_manager->clear_cache();
-            }
-        } catch (\Exception $e) {
-            error_log('Error clearing Elementor cache: ' . $e->getMessage());
+        // Clear Elementor's data cache
+        if (method_exists('\Elementor\Plugin', 'instance')) {
+            // Prevent Elementor from handling files directly
+            remove_action('elementor/core/files/clear_cache', array(\Elementor\Plugin::instance()->files_manager, 'clear_cache'));
+            // Clear other Elementor caches
+            \Elementor\Plugin::instance()->files_manager->clear_cache();
         }
     }
 
@@ -218,19 +214,15 @@ class Tools {
             return;
         }
 
-        try {
-            $files = glob($dir . '/*');
-            if ($files === false) {
-                return;
-            }
+        $files = glob($dir . '/*');
+        if ($files === false) {
+            return;
+        }
 
-            foreach ($files as $file) {
-                if (is_file($file)) {
-                    @unlink($file);
-                }
+        foreach ($files as $file) {
+            if (is_file($file)) {
+                @unlink($file);
             }
-        } catch (\Exception $e) {
-            error_log('Error deleting directory contents: ' . $e->getMessage());
         }
     }
 
