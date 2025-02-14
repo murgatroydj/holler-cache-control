@@ -20,54 +20,72 @@ class Nginx {
         );
 
         error_log("Checking Redis page cache status");
-        try {
-            // Try to connect to Redis
-            $redis = new \Redis();
-            if ($redis->connect('127.0.0.1', 6379)) {
-                error_log("Connected to Redis");
-
-                // Check if there are any page cache keys
-                $site_host = parse_url(home_url(), PHP_URL_HOST);
-                $iterator = null;
-                $pattern = 'nginx-cache:*' . $site_host . '*';
-                error_log("Searching for keys with pattern: " . $pattern);
+        
+        // First check if Redis cache is enabled in Nginx
+        $site_host = parse_url(home_url(), PHP_URL_HOST);
+        $nginx_conf = "/etc/nginx/sites-enabled/{$site_host}";
+        
+        error_log("Checking Nginx site config: " . $nginx_conf);
+        if (file_exists($nginx_conf)) {
+            $nginx_config = file_get_contents($nginx_conf);
+            if ($nginx_config === false) {
+                error_log("Could not read Nginx config");
+                $nginx_config = shell_exec("sudo cat " . escapeshellarg($nginx_conf) . " 2>/dev/null") ?: '';
+            }
+            
+            // Check if Redis page cache is enabled
+            if (strpos($nginx_config, 'redis-fetch') !== false && 
+                strpos($nginx_config, 'redis-store') !== false) {
+                error_log("Found Redis cache directives in Nginx config");
                 
-                // Get Redis info
-                $info = $redis->info();
-                $used_memory = isset($info['used_memory']) ? $info['used_memory'] : 0;
-                error_log("Redis memory usage: " . $used_memory . " bytes");
+                try {
+                    // Try to connect to Redis
+                    $redis = new \Redis();
+                    if ($redis->connect('127.0.0.1', 6379)) {
+                        error_log("Connected to Redis");
+                        
+                        // Get Redis info
+                        $info = $redis->info();
+                        $used_memory = isset($info['used_memory']) ? $info['used_memory'] : 0;
+                        error_log("Redis memory usage: " . $used_memory . " bytes");
 
-                // Check for GridPane's Redis page cache
-                $test_key = 'nginx-cache:test';
-                $test_value = 'test';
-                $test_ttl = 1;
-                
-                error_log("Testing Redis write access with key: " . $test_key);
-                if ($redis->setex($test_key, $test_ttl, $test_value)) {
-                    error_log("Successfully wrote test key to Redis");
-                    
-                    // Redis is writable, which means page caching should work
-                    $result['active'] = true;
-                    $result['details'] = sprintf(
-                        __('GridPane Redis Page Cache | Memory: %s', 'holler-cache-control'),
-                        size_format($used_memory)
-                    );
+                        // Check for GridPane's Redis page cache
+                        $test_key = 'nginx-cache:test';
+                        $test_value = 'test';
+                        $test_ttl = 1;
+                        
+                        error_log("Testing Redis write access with key: " . $test_key);
+                        if ($redis->setex($test_key, $test_ttl, $test_value)) {
+                            error_log("Successfully wrote test key to Redis");
+                            
+                            // Redis is writable and Nginx is configured for page caching
+                            $result['active'] = true;
+                            $result['details'] = sprintf(
+                                __('GridPane Redis Page Cache | Memory: %s', 'holler-cache-control'),
+                                size_format($used_memory)
+                            );
 
-                    // Add note about being logged in
-                    if (is_user_logged_in()) {
-                        $result['details'] .= ' ' . __('(Cache bypassed while logged in)', 'holler-cache-control');
+                            // Add note about being logged in
+                            if (is_user_logged_in()) {
+                                $result['details'] .= ' ' . __('(Cache bypassed while logged in)', 'holler-cache-control');
+                            }
+                            
+                            error_log("Cache status: active");
+                            return $result;
+                        } else {
+                            error_log("Failed to write test key to Redis");
+                        }
+                    } else {
+                        error_log("Could not connect to Redis");
                     }
-                    
-                    error_log("Cache status: active");
-                    return $result;
-                } else {
-                    error_log("Failed to write test key to Redis");
+                } catch (\Exception $e) {
+                    error_log('GridPane Redis Page Cache error: ' . $e->getMessage());
                 }
             } else {
-                error_log("Could not connect to Redis");
+                error_log("Redis cache directives not found in Nginx config");
             }
-        } catch (\Exception $e) {
-            error_log('GridPane Redis Page Cache error: ' . $e->getMessage());
+        } else {
+            error_log("Nginx site config not found");
         }
 
         // Check if FastCGI caching is enabled
