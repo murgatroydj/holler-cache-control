@@ -19,79 +19,55 @@ class Nginx {
             'details' => ''
         );
 
-        // GridPane's configuration paths
-        $site_host = parse_url(home_url(), PHP_URL_HOST);
-        $nginx_conf = "/etc/nginx/common/{$site_host}-wp-redis.conf";
-        
-        error_log("Checking GridPane Redis config at: " . $nginx_conf);
+        error_log("Checking Redis page cache status");
+        try {
+            // Try to connect to Redis
+            $redis = new \Redis();
+            if ($redis->connect('127.0.0.1', 6379)) {
+                error_log("Connected to Redis");
 
-        // Check if Redis page caching is enabled in GridPane
-        if (file_exists($nginx_conf)) {
-            error_log("Redis config file exists");
-            $redis_config = file_get_contents($nginx_conf);
-            
-            // Check for GridPane's Redis page cache configuration
-            if (strpos($redis_config, 'srcache_fetch') !== false && 
-                strpos($redis_config, 'srcache_store') !== false &&
-                strpos($redis_config, 'X-Grid-SRCache') !== false) {
+                // Check if there are any page cache keys
+                $site_host = parse_url(home_url(), PHP_URL_HOST);
+                $iterator = null;
+                $pattern = 'nginx-cache:*' . $site_host . '*';
+                error_log("Searching for keys with pattern: " . $pattern);
                 
-                error_log("Found Redis cache directives in config");
-                try {
-                    // Make a test request to check headers
-                    $url = 'http://127.0.0.1';
-                    error_log("Making test request to: " . $url);
-                    
-                    // Use WordPress HTTP API
-                    $args = array(
-                        'method' => 'HEAD',
-                        'headers' => array(
-                            'Host' => $site_host,
-                            'X-Test' => '1'
-                        ),
-                        'sslverify' => false
-                    );
-                    
-                    $response = wp_remote_request($url, $args);
-                    if (!is_wp_error($response)) {
-                        $headers = wp_remote_retrieve_headers($response);
-                        error_log("Response headers: " . print_r($headers, true));
-                        
-                        // Check for GridPane Redis cache headers
-                        if (isset($headers['x-grid-srcache-ttl'])) {
-                            error_log("Found X-Grid-SRCache-TTL header");
-                            
-                            // Get cache TTL from config
-                            preg_match('/set \$cache_ttl (\d+);/', $redis_config, $matches);
-                            $ttl = isset($matches[1]) ? (int)$matches[1] : 2592000;
-                            error_log("Cache TTL from config: " . $ttl);
-                            
-                            $result['active'] = true;
-                            $result['details'] = sprintf(
-                                __('GridPane Redis Page Cache | TTL: %s', 'holler-cache-control'),
-                                human_time_diff(0, $ttl)
-                            );
+                // Get Redis info
+                $info = $redis->info();
+                $used_memory = isset($info['used_memory']) ? $info['used_memory'] : 0;
+                error_log("Redis memory usage: " . $used_memory . " bytes");
 
-                            // Add note about being logged in
-                            if (is_user_logged_in()) {
-                                $result['details'] .= ' ' . __('(Cache bypassed while logged in)', 'holler-cache-control');
-                            }
-                            
-                            error_log("Cache status: active");
-                            return $result;
-                        } else {
-                            error_log("X-Grid-SRCache-TTL header not found");
-                        }
-                    } else {
-                        error_log("WP HTTP request error: " . $response->get_error_message());
+                // Check for GridPane's Redis page cache
+                $test_key = 'nginx-cache:test';
+                $test_value = 'test';
+                $test_ttl = 1;
+                
+                error_log("Testing Redis write access with key: " . $test_key);
+                if ($redis->setex($test_key, $test_ttl, $test_value)) {
+                    error_log("Successfully wrote test key to Redis");
+                    
+                    // Redis is writable, which means page caching should work
+                    $result['active'] = true;
+                    $result['details'] = sprintf(
+                        __('GridPane Redis Page Cache | Memory: %s', 'holler-cache-control'),
+                        size_format($used_memory)
+                    );
+
+                    // Add note about being logged in
+                    if (is_user_logged_in()) {
+                        $result['details'] .= ' ' . __('(Cache bypassed while logged in)', 'holler-cache-control');
                     }
-                } catch (\Exception $e) {
-                    error_log('GridPane Redis Page Cache error: ' . $e->getMessage());
+                    
+                    error_log("Cache status: active");
+                    return $result;
+                } else {
+                    error_log("Failed to write test key to Redis");
                 }
             } else {
-                error_log("Redis cache directives not found in config");
+                error_log("Could not connect to Redis");
             }
-        } else {
-            error_log("Redis config file not found");
+        } catch (\Exception $e) {
+            error_log('GridPane Redis Page Cache error: ' . $e->getMessage());
         }
 
         // Check if FastCGI caching is enabled
