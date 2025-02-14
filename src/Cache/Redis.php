@@ -42,33 +42,45 @@ class Redis {
             'message' => ''
         );
 
+        $errors = array();
+
+        // Try direct Redis connection first
+        try {
+            $redis = new \Redis();
+            $redis->connect('127.0.0.1', 6379);
+            $redis->flushDb();
+            $result['success'] = true;
+        } catch (\Exception $e) {
+            error_log('Direct Redis flush error: ' . $e->getMessage());
+            $errors[] = $e->getMessage();
+        }
+
+        // Also try through WordPress object cache
         try {
             global $wp_object_cache;
-            
-            if (!$wp_object_cache) {
-                throw new \Exception(__('Object cache not available', 'holler-cache-control'));
-            }
-
-            if (!method_exists($wp_object_cache, 'redis_status') || !$wp_object_cache->redis_status()) {
-                throw new \Exception(__('Redis not connected', 'holler-cache-control'));
-            }
-
-            // Try to flush Redis directly first
-            if (method_exists($wp_object_cache, 'redis_instance')) {
-                $redis = $wp_object_cache->redis_instance();
-                if ($redis) {
-                    $redis->flushdb();
+            if ($wp_object_cache) {
+                if (method_exists($wp_object_cache, 'redis_instance')) {
+                    $redis = $wp_object_cache->redis_instance();
+                    if ($redis) {
+                        $redis->flushdb();
+                    }
                 }
+                
+                if (method_exists($wp_object_cache, 'flush')) {
+                    $wp_object_cache->flush();
+                }
+                
+                $result['success'] = true;
             }
-
-            // Always flush the object cache
-            $wp_object_cache->flush();
-            
-            $result['success'] = true;
-            $result['message'] = __('Redis cache purged successfully', 'holler-cache-control');
-
         } catch (\Exception $e) {
-            $result['message'] = $e->getMessage();
+            error_log('WordPress object cache flush error: ' . $e->getMessage());
+            $errors[] = $e->getMessage();
+        }
+
+        if (!empty($errors)) {
+            $result['message'] = implode(', ', $errors);
+        } else {
+            $result['message'] = __('Redis cache purged successfully', 'holler-cache-control');
         }
 
         return $result;
@@ -85,66 +97,66 @@ class Redis {
             'details' => ''
         );
 
-        // Check if Redis is available on the system
-        if (!class_exists('Redis')) {
-            $result['details'] = __('Redis PHP extension not installed', 'holler-cache-control');
-            return $result;
-        }
-
-        // Check if Redis Object Cache plugin is active and configured
-        if (!class_exists('Redis_Object_Cache') || !defined('WP_REDIS_HOST')) {
-            $result['details'] = __('Redis Object Cache plugin not configured', 'holler-cache-control');
-            return $result;
-        }
-
-        // Check if Redis is disabled
-        if (defined('WP_REDIS_DISABLED') && WP_REDIS_DISABLED) {
-            $result['details'] = __('Redis is disabled in wp-config.php', 'holler-cache-control');
-            return $result;
-        }
-
-        // Check if object cache is working
-        global $wp_object_cache;
-
-        if (!$wp_object_cache || !method_exists($wp_object_cache, 'redis_status')) {
-            $result['details'] = __('Redis Object Cache not initialized', 'holler-cache-control');
-            return $result;
-        }
-
+        // First check if Redis is running on the system
         try {
-            // Use the built-in status check
-            if (!$wp_object_cache->redis_status()) {
-                $result['details'] = __('Redis connection not established', 'holler-cache-control');
-                return $result;
-            }
-
-            // Get Redis instance for more details
-            if (method_exists($wp_object_cache, 'redis_instance')) {
-                $redis = $wp_object_cache->redis_instance();
-                
-                if ($redis) {
-                    $info = $redis->info();
-                    if ($info) {
-                        $result['active'] = true;
-                        $result['details'] = sprintf(
-                            __('Version: %s, Memory Used: %s, Uptime: %s', 'holler-cache-control'),
-                            $info['redis_version'],
-                            size_format($info['used_memory']),
-                            human_time_diff(time() - $info['uptime_in_seconds'])
-                        );
-                        return $result;
-                    }
+            $redis = new \Redis();
+            $redis->connect('127.0.0.1', 6379);
+            $ping = $redis->ping();
+            
+            if ($ping === true || $ping === '+PONG') {
+                $info = $redis->info();
+                if ($info) {
+                    $result['active'] = true;
+                    $result['details'] = sprintf(
+                        __('Version: %s, Memory Used: %s, Uptime: %s', 'holler-cache-control'),
+                        $info['redis_version'],
+                        size_format($info['used_memory']),
+                        human_time_diff(time() - $info['uptime_in_seconds'])
+                    );
+                    return $result;
                 }
             }
-
-            // Fallback if we can't get detailed info
-            $result['active'] = true;
-            $result['details'] = __('Redis is connected and running', 'holler-cache-control');
-
         } catch (\Exception $e) {
-            $result['details'] = sprintf(__('Redis error: %s', 'holler-cache-control'), $e->getMessage());
+            error_log('Redis connection error: ' . $e->getMessage());
+            $result['details'] = __('Redis server not accessible', 'holler-cache-control');
+            return $result;
         }
 
+        // If we can't connect directly, try through WordPress object cache
+        global $wp_object_cache;
+        
+        if ($wp_object_cache && method_exists($wp_object_cache, 'redis_status')) {
+            try {
+                if ($wp_object_cache->redis_status()) {
+                    if (method_exists($wp_object_cache, 'redis_instance')) {
+                        $redis = $wp_object_cache->redis_instance();
+                        if ($redis) {
+                            $info = $redis->info();
+                            if ($info) {
+                                $result['active'] = true;
+                                $result['details'] = sprintf(
+                                    __('Version: %s, Memory Used: %s, Uptime: %s', 'holler-cache-control'),
+                                    $info['redis_version'],
+                                    size_format($info['used_memory']),
+                                    human_time_diff(time() - $info['uptime_in_seconds'])
+                                );
+                                return $result;
+                            }
+                        }
+                    }
+                    
+                    // Fallback if we can't get detailed info
+                    $result['active'] = true;
+                    $result['details'] = __('Redis is connected and running', 'holler-cache-control');
+                    return $result;
+                }
+            } catch (\Exception $e) {
+                error_log('Redis object cache error: ' . $e->getMessage());
+            }
+        }
+
+        // If we get here, Redis is not properly configured
+        $result['details'] = __('Redis not properly configured', 'holler-cache-control');
         return $result;
     }
 
