@@ -42,14 +42,22 @@ class Redis {
             'details' => ''
         );
 
-        // First check if Redis Object Cache is enabled in WordPress
-        global $wp_object_cache;
-        if (!$wp_object_cache || !method_exists($wp_object_cache, 'redis_status') || !$wp_object_cache->redis_status()) {
+        // Check if Redis Object Cache plugin is active and enabled
+        if (!class_exists('Redis_Object_Cache') || !defined('WP_REDIS_DISABLED') || WP_REDIS_DISABLED) {
             $result['details'] = __('Redis Object Cache is disabled in GridPane', 'holler-cache-control');
             return $result;
         }
 
-        // Now check if Redis server is running
+        // Additional check for Redis plugin status
+        if (function_exists('redis_object_cache')) {
+            $diagnostics = redis_object_cache()->diagnostics();
+            if (isset($diagnostics['status']) && $diagnostics['status'] !== 'connected') {
+                $result['details'] = __('Redis Object Cache is disabled in GridPane', 'holler-cache-control');
+                return $result;
+            }
+        }
+
+        // Now check if Redis server is running and accessible
         try {
             $redis = new \Redis();
             $redis->connect('127.0.0.1', 6379);
@@ -58,6 +66,13 @@ class Redis {
             if ($ping === true || $ping === '+PONG') {
                 $info = $redis->info();
                 if ($info) {
+                    // Double check the object cache is actually using Redis
+                    global $wp_object_cache;
+                    if (!$wp_object_cache || !method_exists($wp_object_cache, 'redis_status') || !$wp_object_cache->redis_status()) {
+                        $result['details'] = __('Redis Object Cache is disabled in GridPane', 'holler-cache-control');
+                        return $result;
+                    }
+
                     $result['active'] = true;
                     $result['details'] = sprintf(
                         __('GridPane Redis Object Cache | Memory Used: %s | Uptime: %s', 'holler-cache-control'),
@@ -86,14 +101,27 @@ class Redis {
             'message' => ''
         );
 
-        // Check if Redis Object Cache is enabled
-        global $wp_object_cache;
-        if (!$wp_object_cache || !method_exists($wp_object_cache, 'redis_status') || !$wp_object_cache->redis_status()) {
+        // Check if Redis Object Cache plugin is active and enabled
+        if (!class_exists('Redis_Object_Cache') || !defined('WP_REDIS_DISABLED') || WP_REDIS_DISABLED) {
             $result['message'] = __('Redis Object Cache is disabled in GridPane', 'holler-cache-control');
             return $result;
         }
 
+        // Additional check for Redis plugin status
+        if (function_exists('redis_object_cache')) {
+            $diagnostics = redis_object_cache()->diagnostics();
+            if (isset($diagnostics['status']) && $diagnostics['status'] !== 'connected') {
+                $result['message'] = __('Redis Object Cache is disabled in GridPane', 'holler-cache-control');
+                return $result;
+            }
+        }
+
         try {
+            global $wp_object_cache;
+            if (!$wp_object_cache || !method_exists($wp_object_cache, 'redis_status') || !$wp_object_cache->redis_status()) {
+                throw new \Exception(__('Redis Object Cache is disabled in GridPane', 'holler-cache-control'));
+            }
+
             // Connect to GridPane Redis
             $redis = new \Redis();
             $redis->connect('127.0.0.1', 6379);
