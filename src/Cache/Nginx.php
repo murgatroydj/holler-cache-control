@@ -9,39 +9,43 @@ namespace HollerCacheControl\Cache;
  */
 class Nginx {
     /**
-     * Get Nginx cache status
+     * Get Nginx cache status for GridPane environment
      *
      * @return array
      */
     public static function get_status() {
-        // Get the selected cache method from settings
-        $cache_method = get_option('nginx_cache_method', 'fastcgi');
-        
-        // Set type and details based on cache method
-        $type = '';
-        $details = '';
-        
-        switch ($cache_method) {
-            case 'redis':
-                $type = 'Redis';
-                $details = 'Nginx Redis Cache';
-                break;
-            case 'fastcgi':
-            default:
-                $type = 'FastCGI';
-                $details = 'Nginx FastCGI Cache';
-                break;
+        $result = array(
+            'active' => false,
+            'details' => ''
+        );
+
+        // Check for GridPane's Nginx cache directory
+        $cache_path = '/var/cache/nginx';
+        if (!is_dir($cache_path)) {
+            $result['details'] = __('GridPane Nginx cache directory not found', 'holler-cache-control');
+            return $result;
         }
 
-        return array(
-            'active' => true,
-            'type' => $type,
-            'details' => $details
-        );
+        // Get cache size
+        try {
+            $size = self::get_directory_size($cache_path);
+            $result['active'] = true;
+            $result['details'] = sprintf(
+                __('GridPane Nginx Cache | Cache Size: %s', 'holler-cache-control'),
+                size_format($size)
+            );
+        } catch (\Exception $e) {
+            error_log('GridPane Nginx cache error: ' . $e->getMessage());
+            $result['details'] = __('Error reading GridPane Nginx cache', 'holler-cache-control');
+        }
+
+        return $result;
     }
 
     /**
-     * Purge the Nginx cache
+     * Purge Nginx cache for GridPane environment
+     *
+     * @return array
      */
     public static function purge_cache() {
         $result = array(
@@ -49,34 +53,55 @@ class Nginx {
             'message' => ''
         );
 
-        $cache_path = self::get_cache_path();
-        if (empty($cache_path)) {
-            $result['message'] = 'Cache path not found';
-            return $result;
-        }
-
-        if (!is_dir($cache_path)) {
-            $result['message'] = 'Cache directory does not exist';
-            return $result;
-        }
-
-        if (function_exists('shell_exec')) {
-            @shell_exec('rm -rf ' . escapeshellarg($cache_path . '/*'));
-            $result['success'] = true;
-        } else {
-            $files = glob($cache_path . '/*');
-            if ($files !== false) {
-                foreach ($files as $file) {
-                    if (is_file($file)) {
-                        @unlink($file);
-                    }
-                }
-                $result['success'] = true;
-            } else {
-                $result['message'] = 'Failed to list cache files';
+        try {
+            // GridPane's Nginx cache directory
+            $cache_path = '/var/cache/nginx';
+            
+            if (!is_dir($cache_path)) {
+                throw new \Exception(__('GridPane Nginx cache directory not found', 'holler-cache-control'));
             }
+
+            // Use GridPane's cache purge method
+            exec('rm -rf ' . escapeshellarg($cache_path . '/*'), $output, $return_var);
+            
+            if ($return_var !== 0) {
+                throw new \Exception(__('Failed to purge GridPane Nginx cache', 'holler-cache-control'));
+            }
+
+            $result['success'] = true;
+            $result['message'] = __('GridPane Nginx cache purged successfully', 'holler-cache-control');
+
+        } catch (\Exception $e) {
+            error_log('GridPane Nginx purge error: ' . $e->getMessage());
+            $result['message'] = $e->getMessage();
         }
 
         return $result;
+    }
+
+    /**
+     * Get directory size recursively
+     *
+     * @param string $path
+     * @return int
+     */
+    private static function get_directory_size($path) {
+        $size = 0;
+        $files = scandir($path);
+
+        foreach ($files as $file) {
+            if ($file === '.' || $file === '..') {
+                continue;
+            }
+
+            $full_path = $path . '/' . $file;
+            if (is_dir($full_path)) {
+                $size += self::get_directory_size($full_path);
+            } else {
+                $size += filesize($full_path);
+            }
+        }
+
+        return $size;
     }
 }
