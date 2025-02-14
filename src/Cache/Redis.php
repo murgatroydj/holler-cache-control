@@ -42,7 +42,14 @@ class Redis {
             'details' => ''
         );
 
-        // GridPane always uses Redis on localhost:6379
+        // First check if Redis Object Cache is enabled in WordPress
+        global $wp_object_cache;
+        if (!$wp_object_cache || !method_exists($wp_object_cache, 'redis_status') || !$wp_object_cache->redis_status()) {
+            $result['details'] = __('Redis Object Cache is disabled in GridPane', 'holler-cache-control');
+            return $result;
+        }
+
+        // Now check if Redis server is running
         try {
             $redis = new \Redis();
             $redis->connect('127.0.0.1', 6379);
@@ -53,7 +60,7 @@ class Redis {
                 if ($info) {
                     $result['active'] = true;
                     $result['details'] = sprintf(
-                        __('GridPane Redis Cache | Memory Used: %s | Uptime: %s', 'holler-cache-control'),
+                        __('GridPane Redis Object Cache | Memory Used: %s | Uptime: %s', 'holler-cache-control'),
                         size_format($info['used_memory']),
                         human_time_diff(time() - $info['uptime_in_seconds'])
                     );
@@ -79,26 +86,33 @@ class Redis {
             'message' => ''
         );
 
+        // Check if Redis Object Cache is enabled
+        global $wp_object_cache;
+        if (!$wp_object_cache || !method_exists($wp_object_cache, 'redis_status') || !$wp_object_cache->redis_status()) {
+            $result['message'] = __('Redis Object Cache is disabled in GridPane', 'holler-cache-control');
+            return $result;
+        }
+
         try {
             // Connect to GridPane Redis
             $redis = new \Redis();
             $redis->connect('127.0.0.1', 6379);
             
-            // Flush both object cache and page cache DBs
-            $redis->flushAll(); // Clear all databases
+            // Flush Redis database
+            $redis->select(0); // Object cache typically uses DB 0
+            $redis->flushDb();
             
             // Also clear WordPress object cache
-            global $wp_object_cache;
-            if ($wp_object_cache && method_exists($wp_object_cache, 'flush')) {
+            if (method_exists($wp_object_cache, 'flush')) {
                 $wp_object_cache->flush();
             }
             
             $result['success'] = true;
-            $result['message'] = __('GridPane Redis cache purged successfully', 'holler-cache-control');
+            $result['message'] = __('GridPane Redis Object Cache purged successfully', 'holler-cache-control');
 
         } catch (\Exception $e) {
             error_log('GridPane Redis purge error: ' . $e->getMessage());
-            $result['message'] = __('Failed to purge GridPane Redis cache', 'holler-cache-control');
+            $result['message'] = __('Failed to purge GridPane Redis Object Cache', 'holler-cache-control');
         }
 
         return $result;

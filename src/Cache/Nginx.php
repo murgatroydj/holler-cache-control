@@ -19,19 +19,19 @@ class Nginx {
             'details' => ''
         );
 
-        // Check for GridPane's Nginx cache directory
+        // Check if Nginx page cache is enabled
         $cache_path = '/var/cache/nginx';
         if (!is_dir($cache_path)) {
-            $result['details'] = __('GridPane Nginx cache directory not found', 'holler-cache-control');
+            $result['details'] = __('Nginx Page Cache is disabled in GridPane', 'holler-cache-control');
             return $result;
         }
 
-        // Get cache size
+        // Get cache size if it's enabled
         try {
             $size = self::get_directory_size($cache_path);
             $result['active'] = true;
             $result['details'] = sprintf(
-                __('GridPane Nginx Cache | Cache Size: %s', 'holler-cache-control'),
+                __('GridPane Nginx Page Cache | Cache Size: %s', 'holler-cache-control'),
                 size_format($size)
             );
         } catch (\Exception $e) {
@@ -54,22 +54,21 @@ class Nginx {
         );
 
         try {
-            // GridPane's Nginx cache directory
+            // Check if Nginx page cache is enabled
             $cache_path = '/var/cache/nginx';
-            
             if (!is_dir($cache_path)) {
-                throw new \Exception(__('GridPane Nginx cache directory not found', 'holler-cache-control'));
+                throw new \Exception(__('Nginx Page Cache is disabled in GridPane', 'holler-cache-control'));
             }
 
             // Use GridPane's cache purge method
             exec('rm -rf ' . escapeshellarg($cache_path . '/*'), $output, $return_var);
             
             if ($return_var !== 0) {
-                throw new \Exception(__('Failed to purge GridPane Nginx cache', 'holler-cache-control'));
+                throw new \Exception(__('Failed to purge GridPane Nginx Page Cache', 'holler-cache-control'));
             }
 
             $result['success'] = true;
-            $result['message'] = __('GridPane Nginx cache purged successfully', 'holler-cache-control');
+            $result['message'] = __('GridPane Nginx Page Cache purged successfully', 'holler-cache-control');
 
         } catch (\Exception $e) {
             error_log('GridPane Nginx purge error: ' . $e->getMessage());
