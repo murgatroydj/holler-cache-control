@@ -16,144 +16,81 @@ class Nginx {
     public static function get_status() {
         $result = array(
             'active' => false,
-            'details' => ''
+            'details' => '',
+            'type' => 'none'
         );
-
-        error_log("========= Starting cache detection =========");
         
-        // Check if FastCGI caching is enabled first by checking config
-        $site_host = parse_url(home_url(), PHP_URL_HOST);
-        $nginx_wpfc_conf = "/etc/nginx/common/{$site_host}-wpfc.conf";
+        // Make a test request to check headers
+        $ch = curl_init();
+        curl_setopt_array($ch, array(
+            CURLOPT_URL => home_url(),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HEADER => true,
+            CURLOPT_NOBODY => true,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => false,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_TIMEOUT => 5
+        ));
         
-        error_log("Checking FastCGI config at: " . $nginx_wpfc_conf);
-        
-        // First check if FastCGI is configured
-        if (file_exists($nginx_wpfc_conf)) {
-            error_log("FastCGI config exists");
-            
-            // Check if FastCGI is actually enabled by looking for FASTCGICACHE directive
-            $config_content = file_get_contents($nginx_wpfc_conf);
-            error_log("Config content: " . $config_content);
-            
-            if ($config_content && strpos($config_content, 'fastcgi_cache FASTCGICACHE;') !== false) {
-                error_log("Found FastCGI cache directive");
-                
-                // Make a test request to check headers
-                $url = home_url('/');
-                error_log("Making test request to: " . $url);
-                
-                $args = array(
-                    'method' => 'GET',
-                    'headers' => array(
-                        'Host' => $site_host,
-                        'X-Test' => '1'
-                    ),
-                    'timeout' => 5,
-                    'sslverify' => false
-                );
-                
-                $response = wp_remote_request($url, $args);
-                if (!is_wp_error($response)) {
-                    $headers = wp_remote_retrieve_headers($response);
-                    error_log("Response headers: " . print_r($headers, true));
-                    
-                    // Check for GridPane cache headers
-                    if (isset($headers['x-grid-cache-ttl'])) {
-                        error_log("Found GridPane FastCGI cache headers");
-                        
-                        // FastCGI cache is enabled
-                        $result['active'] = true;
-                        $result['details'] = sprintf(
-                            __('GridPane FastCGI Page Cache | Status: %s', 'holler-cache-control'),
-                            isset($headers['x-grid-cache']) ? $headers['x-grid-cache'] : 'MISS'
-                        );
-                        
-                        // Add note about being logged in
-                        if (is_user_logged_in()) {
-                            $result['details'] .= ' ' . __('(Cache bypassed while logged in)', 'holler-cache-control');
-                        }
-                        
-                        error_log("Cache status: active (FastCGI)");
-                        return $result;
-                    } else {
-                        error_log("No GridPane cache headers found in response");
-                    }
-                } else {
-                    error_log("Error making test request: " . $response->get_error_message());
-                }
-            } else {
-                error_log("FastCGI cache directive not found in config");
-            }
-        } else {
-            error_log("FastCGI config file not found");
+        $response = curl_exec($ch);
+        if ($response === false) {
+            $result['details'] = __('Could not check cache status', 'holler-cache-control');
+            curl_close($ch);
+            return $result;
         }
         
-        // If no FastCGI cache, check for Redis
-        error_log("Checking Redis cache");
-        try {
-            // Try to connect to Redis
-            $redis = new \Redis();
-            if ($redis->connect('127.0.0.1', 6379)) {
-                error_log("Connected to Redis");
-                
-                // Get Redis info
-                $info = $redis->info();
-                $used_memory = isset($info['used_memory']) ? $info['used_memory'] : 0;
-                error_log("Redis memory usage: " . $used_memory . " bytes");
-                
-                // Make a test request to check headers
-                $url = home_url('/');
-                error_log("Making test request to: " . $url);
-                
-                $args = array(
-                    'method' => 'GET',
-                    'headers' => array(
-                        'Host' => $site_host,
-                        'X-Test' => '1'
-                    ),
-                    'timeout' => 5,
-                    'sslverify' => false
-                );
-                
-                $response = wp_remote_request($url, $args);
-                if (!is_wp_error($response)) {
-                    $headers = wp_remote_retrieve_headers($response);
-                    error_log("Response headers: " . print_r($headers, true));
-                    
-                    // Check for GridPane Redis cache headers
-                    if (isset($headers['x-grid-cache-ttl'])) {
-                        error_log("Found GridPane Redis cache headers");
-                        
-                        // Redis is writable and Nginx is configured for page caching
-                        $result['active'] = true;
-                        $result['details'] = sprintf(
-                            __('GridPane Redis Page Cache | Memory: %s | Status: %s', 'holler-cache-control'),
-                            size_format($used_memory),
-                            isset($headers['x-grid-cache']) ? $headers['x-grid-cache'] : 'MISS'
-                        );
-
-                        // Add note about being logged in
-                        if (is_user_logged_in()) {
-                            $result['details'] .= ' ' . __('(Cache bypassed while logged in)', 'holler-cache-control');
-                        }
-                        
-                        error_log("Cache status: active (Redis)");
-                        return $result;
-                    } else {
-                        error_log("No GridPane Redis cache headers found in response");
-                    }
-                } else {
-                    error_log("Error making test request: " . $response->get_error_message());
-                }
-            } else {
-                error_log("Could not connect to Redis");
+        $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+        $headers = substr($response, 0, $header_size);
+        curl_close($ch);
+        
+        // Parse headers
+        $headers_array = array();
+        foreach (explode("\n", $headers) as $line) {
+            $parts = explode(':', $line, 2);
+            if (isset($parts[1])) {
+                $headers_array[strtolower(trim($parts[0]))] = trim($parts[1]);
             }
-        } catch (\Exception $e) {
-            error_log('GridPane Redis Page Cache error: ' . $e->getMessage());
         }
-
-        error_log("No caching detected");
-        $result['details'] = __('Page Caching is disabled in GridPane', 'holler-cache-control');
+        
+        // Check for Redis cache headers
+        $redis_headers = array(
+            'x-grid-srcache-ttl',
+            'x-grid-srcache-fetch',
+            'x-grid-srcache-store',
+            'x-grid-srcache-skip'
+        );
+        
+        $has_redis_headers = false;
+        foreach ($redis_headers as $header) {
+            if (isset($headers_array[$header])) {
+                $has_redis_headers = true;
+                break;
+            }
+        }
+        
+        if ($has_redis_headers) {
+            $result['active'] = true;
+            $result['type'] = 'redis';
+            
+            // Get cache status if available
+            if (isset($headers_array['x-grid-srcache-skip']) && !empty($headers_array['x-grid-srcache-skip'])) {
+                $result['details'] = sprintf(
+                    __('Redis Page Caching (Skipped: %s)', 'holler-cache-control'),
+                    $headers_array['x-grid-srcache-skip']
+                );
+            } else {
+                $cache_status = isset($headers_array['x-grid-srcache-fetch']) ? $headers_array['x-grid-srcache-fetch'] : 'MISS';
+                $result['details'] = sprintf(
+                    __('Redis Page Caching (Status: %s)', 'holler-cache-control'),
+                    $cache_status
+                );
+            }
+            
+            return $result;
+        }
+        
+        $result['details'] = __('Page Caching Disabled', 'holler-cache-control');
         return $result;
     }
 
@@ -162,58 +99,30 @@ class Nginx {
      *
      * @return array
      */
-    public static function purge_cache() {
+    public static function purge() {
         $result = array(
             'success' => false,
             'message' => ''
         );
 
         try {
-            // GridPane's configuration paths
-            $site_host = parse_url(home_url(), PHP_URL_HOST);
-            $nginx_conf = "/etc/nginx/common/{$site_host}-wp-redis.conf";
-
-            // Check if Redis page caching is enabled
-            if (file_exists($nginx_conf)) {
-                $redis_config = file_get_contents($nginx_conf);
-                if (strpos($redis_config, 'srcache_fetch') !== false && strpos($redis_config, 'srcache_store') !== false) {
-                    $redis = new \Redis();
-                    if (!$redis->connect('127.0.0.1', 6379)) {
-                        throw new \Exception(__('Could not connect to Redis server', 'holler-cache-control'));
-                    }
-
-                    // Purge GridPane's Redis page cache for this site
-                    $iterator = null;
-                    $pattern = 'nginx-cache:*' . $site_host . '*';
-                    while ($keys = $redis->scan($iterator, $pattern, 100)) {
-                        foreach ($keys as $key) {
-                            $redis->del($key);
-                        }
-                    }
-
-                    $result['success'] = true;
-                    $result['message'] = __('GridPane Redis Page Cache purged successfully', 'holler-cache-control');
-                    return $result;
-                }
+            $status = self::get_status();
+            if (!$status['active']) {
+                throw new \Exception(__('Page Caching is not active', 'holler-cache-control'));
             }
 
-            // Check if FastCGI cache exists
-            $cache_path = '/var/cache/nginx';
-            if (is_dir($cache_path)) {
-                exec('rm -rf ' . escapeshellarg($cache_path . '/*'), $output, $return_var);
-                
-                if ($return_var !== 0) {
-                    throw new \Exception(__('Failed to purge GridPane FastCGI Page Cache', 'holler-cache-control'));
-                }
-                
-                $result['success'] = true;
-                $result['message'] = __('GridPane FastCGI Page Cache purged successfully', 'holler-cache-control');
-                return $result;
+            // Clear Redis cache using wp-cli
+            $command = 'wp redis flush';
+            $output = shell_exec($command . ' 2>&1');
+            
+            if ($output === null) {
+                throw new \Exception(__('Failed to execute Redis flush command', 'holler-cache-control'));
             }
 
-            throw new \Exception(__('Page Caching is disabled in GridPane', 'holler-cache-control'));
+            $result['success'] = true;
+            $result['message'] = __('Page Cache cleared successfully', 'holler-cache-control');
+            
         } catch (\Exception $e) {
-            error_log('GridPane page cache purge error: ' . $e->getMessage());
             $result['message'] = $e->getMessage();
         }
 

@@ -71,22 +71,26 @@ class Plugin {
      * @access   private
      */
     private function define_admin_hooks() {
-        $tools = new Tools($this->get_plugin_name(), $this->get_version());
-        
-        // Register settings page
-        $this->loader->add_action('admin_menu', $tools, 'add_tools_page');
-        
-        // Register AJAX handlers
-        $this->loader->add_action('wp_ajax_holler_cache_control_purge', $tools, 'handle_purge_cache');
-        $this->loader->add_action('wp_ajax_holler_cache_control_status', $tools, 'handle_cache_status');
-        
-        // Register admin bar modifications
-        $this->loader->add_action('wp_before_admin_bar_render', $tools, 'remove_original_buttons', 999);
-        $this->loader->add_action('admin_bar_menu', $tools, 'modify_admin_bar', 100);
-        
-        // Register asset enqueuing
-        $this->loader->add_action('admin_enqueue_scripts', $tools, 'enqueue_assets');
-        $this->loader->add_action('wp_enqueue_scripts', $tools, 'enqueue_assets');
+        $admin = new \HollerCacheControl\Admin\Tools($this->get_plugin_name(), $this->get_version());
+
+        // Add menu items
+        $this->loader->add_action('admin_menu', $admin, 'add_plugin_admin_menu');
+        $this->loader->add_action('admin_bar_menu', $admin, 'admin_bar_menu', 100);
+
+        // Register settings
+        $this->loader->add_action('admin_init', $admin, 'register_settings');
+
+        // Register AJAX handlers for cache status and purging
+        $this->loader->add_action('wp_ajax_holler_cache_status', $admin, 'handle_cache_status');
+        $this->loader->add_action('wp_ajax_holler_purge_all', $admin, 'handle_purge_cache');
+        $this->loader->add_action('wp_ajax_holler_purge_nginx', $admin, 'handle_purge_cache');
+        $this->loader->add_action('wp_ajax_holler_purge_redis', $admin, 'handle_purge_cache');
+        $this->loader->add_action('wp_ajax_holler_purge_cloudflare', $admin, 'handle_purge_cache');
+        $this->loader->add_action('wp_ajax_holler_purge_cloudflare_apo', $admin, 'handle_purge_cache');
+
+        // Enqueue admin scripts and styles
+        $this->loader->add_action('admin_enqueue_scripts', $admin, 'enqueue_styles');
+        $this->loader->add_action('admin_enqueue_scripts', $admin, 'enqueue_scripts');
     }
 
     /**

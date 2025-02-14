@@ -11,11 +11,17 @@ class Cloudflare {
      * @return array Array containing email, api_key, and zone_id
      */
     public static function get_credentials() {
-        return array(
-            'email' => defined('CLOUDFLARE_EMAIL') ? CLOUDFLARE_EMAIL : get_option('cloudflare_email'),
-            'api_key' => defined('CLOUDFLARE_API_KEY') ? CLOUDFLARE_API_KEY : get_option('cloudflare_api_key'),
-            'zone_id' => defined('CLOUDFLARE_ZONE_ID') ? CLOUDFLARE_ZONE_ID : get_option('cloudflare_zone_id')
+        $credentials = array(
+            'email' => get_option('cloudflare_email', ''),
+            'api_key' => get_option('cloudflare_api_key', ''),
+            'zone_id' => get_option('cloudflare_zone_id', '')
         );
+
+        $credentials['valid'] = !empty($credentials['email']) && 
+                              !empty($credentials['api_key']) && 
+                              !empty($credentials['zone_id']);
+
+        return $credentials;
     }
 
     /**
@@ -43,7 +49,7 @@ class Cloudflare {
      */
     public static function are_credentials_set() {
         $credentials = self::get_credentials();
-        return !empty($credentials['email']) && !empty($credentials['api_key']) && !empty($credentials['zone_id']);
+        return $credentials['valid'];
     }
 
     /**
@@ -256,47 +262,48 @@ class Cloudflare {
      *
      * @return array
      */
-    public static function purge_cache() {
-        if (!self::are_credentials_set()) {
-            return array(
-                'success' => false,
-                'message' => __('Cloudflare is not configured', 'holler-cache-control')
-            );
-        }
-
-        $credentials = self::get_credentials();
-
-        $response = wp_remote_post(
-            "https://api.cloudflare.com/client/v4/zones/{$credentials['zone_id']}/purge_cache",
-            array(
-                'headers' => array(
-                    'X-Auth-Email' => $credentials['email'],
-                    'X-Auth-Key' => $credentials['api_key'],
-                    'Content-Type' => 'application/json'
-                ),
-                'body' => json_encode(array('purge_everything' => true))
-            )
+    public static function purge() {
+        $result = array(
+            'success' => false,
+            'message' => ''
         );
 
-        if (is_wp_error($response)) {
-            return array(
-                'success' => false,
-                'message' => $response->get_error_message()
+        try {
+            $credentials = self::get_credentials();
+            if (!$credentials['valid']) {
+                throw new \Exception(__('Cloudflare credentials not configured', 'holler-cache-control'));
+            }
+
+            $response = wp_remote_post(
+                "https://api.cloudflare.com/client/v4/zones/{$credentials['zone_id']}/purge_cache",
+                array(
+                    'headers' => array(
+                        'X-Auth-Email' => $credentials['email'],
+                        'X-Auth-Key'   => $credentials['api_key'],
+                        'Content-Type' => 'application/json'
+                    ),
+                    'body' => json_encode(array(
+                        'purge_everything' => true
+                    ))
+                )
             );
+
+            if (is_wp_error($response)) {
+                throw new \Exception($response->get_error_message());
+            }
+
+            $body = json_decode(wp_remote_retrieve_body($response), true);
+            if (!$body['success']) {
+                throw new \Exception(isset($body['errors'][0]['message']) ? $body['errors'][0]['message'] : __('Unknown Cloudflare error', 'holler-cache-control'));
+            }
+
+            $result['success'] = true;
+            $result['message'] = __('Cloudflare cache cleared successfully', 'holler-cache-control');
+
+        } catch (\Exception $e) {
+            $result['message'] = $e->getMessage();
         }
 
-        $body = json_decode(wp_remote_retrieve_body($response), true);
-
-        if (empty($body) || !isset($body['success']) || !$body['success']) {
-            return array(
-                'success' => false,
-                'message' => isset($body['errors'][0]['message']) ? $body['errors'][0]['message'] : __('API Error', 'holler-cache-control')
-            );
-        }
-
-        return array(
-            'success' => true,
-            'message' => __('Cache purged successfully', 'holler-cache-control')
-        );
+        return $result;
     }
 }

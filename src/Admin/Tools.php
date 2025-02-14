@@ -16,13 +16,13 @@ class Tools {
     private $plugin_name;
     private $version;
 
-    public function __construct($plugin_name, $version) {
+    public function __construct($plugin_name = 'holler-cache-control', $version = '1.0.0') {
         $this->plugin_name = $plugin_name;
         $this->version = $version;
 
         // Add admin bar menu with high priority to ensure it runs after other plugins
         add_action('wp_before_admin_bar_render', array($this, 'remove_original_buttons'), 999);
-        add_action('admin_bar_menu', array($this, 'modify_admin_bar'), 100);
+        add_action('admin_bar_menu', array($this, 'admin_bar_menu'), 100);
 
         // Register settings
         add_action('admin_init', array($this, 'register_settings'));
@@ -30,6 +30,7 @@ class Tools {
         // Register AJAX handlers
         add_action('wp_ajax_holler_cache_control_purge', array($this, 'handle_purge_cache'));
         add_action('wp_ajax_holler_cache_control_status', array($this, 'handle_cache_status'));
+        add_action('wp_ajax_holler_purge_nginx_cache', array($this, 'purge_nginx_cache'));
 
         // Enqueue scripts for both admin and front-end when user is logged in
         add_action('admin_enqueue_scripts', array($this, 'enqueue_assets'));
@@ -105,35 +106,46 @@ class Tools {
      * Actually purge all caches
      */
     public function purge_all_caches() {
+        $result = array(
+            'success' => false,
+            'message' => ''
+        );
+
         try {
-            $cache_status = $this->get_cache_systems_status();
-            
-            // Purge Nginx cache first as it's typically fastest
-            if ($cache_status['nginx']['active']) {
-                Nginx::purge_cache();
+            // Purge Nginx cache
+            $nginx_result = \HollerCacheControl\Cache\Nginx::purge();
+            if (!$nginx_result['success']) {
+                $result['message'] .= $nginx_result['message'] . "\n";
             }
 
             // Purge Redis cache
-            if ($cache_status['redis']['active']) {
-                Redis::purge_cache();
+            $redis_result = \HollerCacheControl\Cache\Redis::purge();
+            if (!$redis_result['success']) {
+                $result['message'] .= $redis_result['message'] . "\n";
             }
 
             // Purge Cloudflare cache
-            if ($cache_status['cloudflare']['active']) {
-                Cloudflare::purge_cache();
+            $cloudflare_result = \HollerCacheControl\Cache\Cloudflare::purge();
+            if (!$cloudflare_result['success']) {
+                $result['message'] .= $cloudflare_result['message'] . "\n";
             }
 
             // Purge Cloudflare APO cache
-            if ($cache_status['cloudflare-apo']['active']) {
-                CloudflareAPO::purge_cache();
+            $cloudflare_apo_result = \HollerCacheControl\Cache\CloudflareAPO::purge();
+            if (!$cloudflare_apo_result['success']) {
+                $result['message'] .= $cloudflare_apo_result['message'] . "\n";
             }
 
-            // Clear Elementor cache
-            $this->purge_elementor_cache();
+            $result['success'] = true;
+            if (empty($result['message'])) {
+                $result['message'] = __('All caches cleared successfully', 'holler-cache-control');
+            }
 
         } catch (\Exception $e) {
-            error_log('Cache purge error: ' . $e->getMessage());
+            $result['message'] = $e->getMessage();
         }
+
+        return $result;
     }
 
     /**
@@ -316,9 +328,9 @@ class Tools {
             'nginx_cache_method',
             array(
                 'type' => 'string',
-                'default' => 'fastcgi',
+                'default' => 'redis',
                 'sanitize_callback' => function($value) {
-                    return in_array($value, array('fastcgi', 'redis')) ? $value : 'fastcgi';
+                    return in_array($value, array('fastcgi', 'redis')) ? $value : 'redis';
                 }
             )
         );
@@ -377,68 +389,68 @@ class Tools {
         }
     }
 
-    public function enqueue_assets() {
-        // Only enqueue if user can manage options and admin bar is showing
-        if (!current_user_can('manage_options') || !is_admin_bar_showing()) {
+    /**
+     * Register the stylesheets for the admin area.
+     */
+    public function enqueue_styles() {
+        $css_file = plugin_dir_path(dirname(__DIR__)) . 'assets/css/admin.css';
+        if (file_exists($css_file)) {
+            wp_enqueue_style(
+                'holler-cache-control-admin',
+                plugin_dir_url(dirname(__DIR__)) . 'assets/css/admin.css',
+                array(),
+                filemtime($css_file)
+            );
+        }
+    }
+
+    /**
+     * Register the JavaScript for the admin area.
+     */
+    public function enqueue_scripts($hook) {
+        if (!$this->is_plugin_admin_page($hook) && !is_admin_bar_showing()) {
             return;
         }
 
-        // Enqueue CSS
-        if (is_admin()) {
-            wp_enqueue_style(
-                $this->plugin_name,
-                plugin_dir_url(dirname(__DIR__)) . 'assets/css/admin.css',
-                array(),
-                $this->version,
-                'all'
-            );
-        } else {
-            // Add admin CSS for notices on front-end
-            wp_enqueue_style(
-                'wp-admin',
-                includes_url('css/admin-bar.min.css')
-            );
-        }
-
-        // Enqueue JS
-        $js_file = plugin_dir_path(dirname(__DIR__)) . 'assets/js/admin.js';
-        $version = file_exists($js_file) ? filemtime($js_file) : $this->version;
-
         wp_enqueue_script(
             $this->plugin_name,
-            plugin_dir_url(dirname(__DIR__)) . 'assets/js/admin.js',
+            plugin_dir_url(dirname(dirname(__FILE__))) . 'assets/js/admin.js',
             array('jquery'),
-            $version,
+            filemtime(plugin_dir_path(dirname(dirname(__FILE__))) . 'assets/js/admin.js'),
             true
         );
 
-        wp_localize_script(
-            $this->plugin_name,
-            'hollerCacheControl',
-            array(
-                'ajax_url' => admin_url('admin-ajax.php'),
-                'nonce' => wp_create_nonce('holler_cache_control_nonce'),
-                'i18n' => array(
-                    'purging' => __('Purging...', 'holler-cache-control'),
-                    'purged' => __('Purged!', 'holler-cache-control'),
-                    'error' => __('Error: ', 'holler-cache-control'),
-                    'confirm_purge_nginx' => __('Are you sure you want to purge the Nginx cache?', 'holler-cache-control'),
-                    'confirm_purge_redis' => __('Are you sure you want to purge the Redis cache?', 'holler-cache-control'),
-                    'confirm_purge_cloudflare' => __('Are you sure you want to purge the Cloudflare cache?', 'holler-cache-control'),
-                    'confirm_purge_cloudflare_apo' => __('Are you sure you want to purge the Cloudflare APO cache?', 'holler-cache-control'),
-                    'confirm_purge_all' => __('Are you sure you want to purge all caches?', 'holler-cache-control')
-                )
+        wp_localize_script($this->plugin_name, 'hollerCacheControl', array(
+            'i18n' => array(
+                'purging' => __('Purging...', 'holler-cache-control'),
+                'updating' => __('Updating...', 'holler-cache-control')
+            ),
+            'nonces' => array(
+                'status' => wp_create_nonce('holler_cache_status'),
+                'all' => wp_create_nonce('holler_purge_all'),
+                'nginx' => wp_create_nonce('holler_purge_nginx'),
+                'redis' => wp_create_nonce('holler_purge_redis'),
+                'cloudflare' => wp_create_nonce('holler_purge_cloudflare'),
+                'cloudflare_apo' => wp_create_nonce('holler_purge_cloudflare_apo')
             )
-        );
+        ));
     }
 
-    public function add_tools_page() {
-        add_management_page(
+    /**
+     * Enqueue assets for both admin and front-end when user is logged in
+     */
+    public function enqueue_assets() {
+        $this->enqueue_styles();
+        $this->enqueue_scripts('admin.php');
+    }
+
+    public function add_plugin_admin_menu() {
+        add_options_page(
             __('Cache Control', 'holler-cache-control'),
             __('Cache Control', 'holler-cache-control'),
             'manage_options',
-            $this->plugin_name,
-            array($this, 'render_tools_page')
+            'holler-cache-control',
+            array($this, 'display_plugin_admin_page')
         );
     }
 
@@ -451,186 +463,146 @@ class Tools {
         );
     }
 
-    public function render_tools_page() {
-        $cache_status = self::get_cache_systems_status();
-        extract($cache_status);
-        require_once plugin_dir_path(__FILE__) . 'views/admin-display.php';
+    public function display_plugin_admin_page() {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        // Get cache statuses
+        $nginx_status = \HollerCacheControl\Cache\Nginx::get_status();
+        $redis_status = \HollerCacheControl\Cache\Redis::get_status();
+        $cloudflare_status = \HollerCacheControl\Cache\Cloudflare::get_status();
+        $cloudflare_apo_status = \HollerCacheControl\Cache\CloudflareAPO::get_status();
+
+        // Include the admin display template
+        include_once plugin_dir_path(dirname(__FILE__)) . 'Admin/views/admin-display.php';
     }
 
     /**
      * Handle AJAX request to purge cache
      */
     public function handle_purge_cache() {
-        try {
-            check_ajax_referer('holler_cache_control_nonce', 'nonce');
-
-            if (!current_user_can('manage_options')) {
-                wp_send_json_error(__('Insufficient permissions', 'holler-cache-control'));
-                return;
-            }
-
-            $cache_type = isset($_POST['cache_type']) ? sanitize_text_field($_POST['cache_type']) : '';
-            if (empty($cache_type)) {
-                wp_send_json_error(__('No cache type specified', 'holler-cache-control'));
-                return;
-            }
-
-            $cache_status = $this->get_cache_systems_status();
-            $results = array();
-
-            // Handle purge all caches
-            if ($cache_type === 'all') {
-                // Purge Nginx cache if active
-                if ($cache_status['nginx']['active']) {
-                    try {
-                        $result = Nginx::purge_cache();
-                        $results['nginx'] = $result;
-                    } catch (\Exception $e) {
-                        error_log('Nginx cache purge error: ' . $e->getMessage());
-                        $results['nginx'] = array(
-                            'success' => false,
-                            'message' => $e->getMessage()
-                        );
-                    }
-                }
-
-                // Purge Redis cache if active
-                if ($cache_status['redis']['active']) {
-                    try {
-                        $result = Redis::purge_cache();
-                        $results['redis'] = $result;
-                    } catch (\Exception $e) {
-                        error_log('Redis cache purge error: ' . $e->getMessage());
-                        $results['redis'] = array(
-                            'success' => false,
-                            'message' => $e->getMessage()
-                        );
-                    }
-                }
-
-                // Purge Cloudflare cache if active
-                if ($cache_status['cloudflare']['active']) {
-                    try {
-                        $result = Cloudflare::purge_cache();
-                        $results['cloudflare'] = $result;
-                    } catch (\Exception $e) {
-                        error_log('Cloudflare cache purge error: ' . $e->getMessage());
-                        $results['cloudflare'] = array(
-                            'success' => false,
-                            'message' => $e->getMessage()
-                        );
-                    }
-                }
-
-                // Purge Cloudflare APO cache if active
-                if ($cache_status['cloudflare-apo']['active']) {
-                    try {
-                        $result = CloudflareAPO::purge_cache();
-                        $results['cloudflare-apo'] = $result;
-                    } catch (\Exception $e) {
-                        error_log('Cloudflare APO cache purge error: ' . $e->getMessage());
-                        $results['cloudflare-apo'] = array(
-                            'success' => false,
-                            'message' => $e->getMessage()
-                        );
-                    }
-                }
-
-            } else {
-                // Handle individual cache type
-                switch ($cache_type) {
-                    case 'nginx':
-                        if ($cache_status['nginx']['active']) {
-                            try {
-                                $results['nginx'] = Nginx::purge_cache();
-                            } catch (\Exception $e) {
-                                error_log('Nginx cache purge error: ' . $e->getMessage());
-                                $results['nginx'] = array(
-                                    'success' => false,
-                                    'message' => $e->getMessage()
-                                );
-                            }
-                        }
-                        break;
-                    case 'redis':
-                        if ($cache_status['redis']['active']) {
-                            try {
-                                $results['redis'] = Redis::purge_cache();
-                            } catch (\Exception $e) {
-                                error_log('Redis cache purge error: ' . $e->getMessage());
-                                $results['redis'] = array(
-                                    'success' => false,
-                                    'message' => $e->getMessage()
-                                );
-                            }
-                        }
-                        break;
-                    case 'cloudflare':
-                        if ($cache_status['cloudflare']['active']) {
-                            try {
-                                $results['cloudflare'] = Cloudflare::purge_cache();
-                            } catch (\Exception $e) {
-                                error_log('Cloudflare cache purge error: ' . $e->getMessage());
-                                $results['cloudflare'] = array(
-                                    'success' => false,
-                                    'message' => $e->getMessage()
-                                );
-                            }
-                        }
-                        break;
-                    case 'cloudflare-apo':
-                        if ($cache_status['cloudflare-apo']['active']) {
-                            try {
-                                $results['cloudflare-apo'] = CloudflareAPO::purge_cache();
-                            } catch (\Exception $e) {
-                                error_log('Cloudflare APO cache purge error: ' . $e->getMessage());
-                                $results['cloudflare-apo'] = array(
-                                    'success' => false,
-                                    'message' => $e->getMessage()
-                                );
-                            }
-                        }
-                        break;
-                    default:
-                        wp_send_json_error(__('Invalid cache type', 'holler-cache-control'));
-                        return;
-                }
-            }
-
-            // Check for any errors
-            $errors = array();
-            foreach ($results as $cache => $result) {
-                if (!$result['success']) {
-                    $errors[] = $cache . ': ' . $result['message'];
-                }
-            }
-
-            if (!empty($errors)) {
-                error_log('Cache purge errors: ' . implode(', ', $errors));
-                wp_send_json_error(implode(', ', $errors));
-                return;
-            }
-
-            wp_send_json_success(__('Cache purged successfully', 'holler-cache-control'));
-
-        } catch (\Exception $e) {
-            error_log('Cache purge fatal error: ' . $e->getMessage());
-            wp_send_json_error($e->getMessage());
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(__('You do not have permission to perform this action.', 'holler-cache-control'));
+            return;
         }
+
+        if (!isset($_POST['type'])) {
+            wp_send_json_error(__('No cache type specified.', 'holler-cache-control'));
+            return;
+        }
+
+        $type = sanitize_text_field($_POST['type']);
+        
+        // Verify nonce
+        if (!check_ajax_referer('holler_purge_' . $type, '_ajax_nonce', false)) {
+            wp_send_json_error(__('Invalid security token.', 'holler-cache-control'));
+            return;
+        }
+
+        $results = array();
+        $success = true;
+        $messages = array();
+
+        // If type is 'all', purge all caches
+        if ($type === 'all') {
+            $caches = array('nginx', 'redis', 'cloudflare', 'cloudflare-apo');
+            foreach ($caches as $cache_type) {
+                $result = $this->purge_single_cache($cache_type);
+                if (!empty($result['message'])) {
+                    $messages[] = $result['message'];
+                }
+                if (!$result['success']) {
+                    $success = false;
+                }
+            }
+            
+            if ($success) {
+                wp_send_json_success(__('All caches cleared successfully', 'holler-cache-control'));
+            } else {
+                wp_send_json_error(implode("\n", $messages));
+            }
+            return;
+        }
+
+        // Handle single cache type
+        $result = $this->purge_single_cache($type);
+        if ($result['success']) {
+            wp_send_json_success($result['message']);
+        } else {
+            wp_send_json_error($result['message']);
+        }
+    }
+
+    private function purge_single_cache($type) {
+        $result = array(
+            'success' => false,
+            'message' => ''
+        );
+
+        switch ($type) {
+            case 'nginx':
+                $result = \HollerCacheControl\Cache\Nginx::purge();
+                break;
+            case 'redis':
+                $result = \HollerCacheControl\Cache\Redis::purge();
+                break;
+            case 'cloudflare':
+                $result = \HollerCacheControl\Cache\Cloudflare::purge();
+                break;
+            case 'cloudflare-apo':
+                $result = \HollerCacheControl\Cache\CloudflareAPO::purge();
+                break;
+            default:
+                $result['message'] = sprintf(
+                    __('Invalid cache type: %s', 'holler-cache-control'),
+                    $type
+                );
+                break;
+        }
+
+        return $result;
     }
 
     /**
      * Handle AJAX request for cache status
      */
     public function handle_cache_status() {
-        check_ajax_referer('holler_cache_control_nonce', 'nonce');
-
         if (!current_user_can('manage_options')) {
-            wp_send_json_error('Unauthorized');
+            wp_send_json_error(__('You do not have permission to perform this action.', 'holler-cache-control'));
+            return;
         }
 
-        $status = self::get_cache_systems_status();
-        wp_send_json_success($status);
+        if (!check_ajax_referer('holler_cache_status', '_ajax_nonce', false)) {
+            wp_send_json_error(__('Invalid security token.', 'holler-cache-control'));
+            return;
+        }
+
+        $statuses = array(
+            'nginx' => \HollerCacheControl\Cache\Nginx::get_status(),
+            'redis' => \HollerCacheControl\Cache\Redis::get_status(),
+            'cloudflare' => \HollerCacheControl\Cache\Cloudflare::get_status(),
+            'cloudflare_apo' => \HollerCacheControl\Cache\CloudflareAPO::get_status()
+        );
+
+        wp_send_json_success($statuses);
+    }
+
+    public function purge_nginx_cache() {
+        check_ajax_referer('holler_purge_nginx_cache');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(__('You do not have permission to perform this action.', 'holler-cache-control'));
+            return;
+        }
+        
+        $result = \HollerCacheControl\Cache\Nginx::purge();
+        
+        if ($result['success']) {
+            wp_send_json_success($result['message']);
+        } else {
+            wp_send_json_error($result['message']);
+        }
     }
 
     public function remove_original_buttons() {
@@ -651,96 +623,165 @@ class Tools {
         }
     }
 
-    public function modify_admin_bar($wp_admin_bar) {
-        // Check if user has permission
+    public function admin_bar_menu($wp_admin_bar) {
         if (!current_user_can('manage_options')) {
             return;
         }
 
-        // Add the parent menu item
+        // Get cache statuses
+        $nginx_status = \HollerCacheControl\Cache\Nginx::get_status();
+        $redis_status = \HollerCacheControl\Cache\Redis::get_status();
+        $cloudflare_status = \HollerCacheControl\Cache\Cloudflare::get_status();
+        $cloudflare_apo_status = \HollerCacheControl\Cache\CloudflareAPO::get_status();
+
+        // Add main menu item
         $wp_admin_bar->add_menu(array(
             'id' => 'holler-cache-control',
             'title' => __('Cache Control', 'holler-cache-control'),
-            'href' => admin_url('admin.php?page=holler-cache-control'),
+            'href' => admin_url('admin.php?page=holler-cache-control')
         ));
 
-        // Add Purge All Caches button
+        // Add cache status submenu
         $wp_admin_bar->add_menu(array(
             'parent' => 'holler-cache-control',
-            'id' => 'wp-admin-bar-purge-all',
+            'id' => 'holler-cache-status',
+            'title' => __('Cache Status', 'holler-cache-control')
+        ));
+
+        // Add individual cache status items
+        $wp_admin_bar->add_menu(array(
+            'parent' => 'holler-cache-status',
+            'id' => 'holler-nginx-status',
             'title' => sprintf(
-                '<a href="#" class="ab-item purge-cache" data-cache-type="all">%s</a>',
-                __('Purge All Caches', 'holler-cache-control')
-            ),
-            'meta' => array('class' => 'purge-button')
+                __('Nginx Page Cache: %s', 'holler-cache-control'),
+                $nginx_status['active'] ? '✅' : '❌'
+            )
         ));
 
-        // Add separator after Purge All
         $wp_admin_bar->add_menu(array(
-            'parent' => 'holler-cache-control',
-            'id' => 'cache-control-separator-top',
-            'title' => '<hr style="margin: 5px 0; border: 0; border-top: 1px solid rgba(255,255,255,0.2);">',
-            'meta' => array('class' => 'separator')
-        ));
-
-        // Add Nginx cache controls
-        $wp_admin_bar->add_menu(array(
-            'parent' => 'holler-cache-control',
-            'id' => 'wp-admin-bar-purge-nginx',
+            'parent' => 'holler-cache-status',
+            'id' => 'holler-redis-status',
             'title' => sprintf(
-                '<a href="#" class="ab-item purge-cache" data-cache-type="nginx">%s</a>',
-                __('Purge Nginx Cache', 'holler-cache-control')
-            ),
-            'meta' => array('class' => 'purge-button')
+                __('Redis Object Cache: %s', 'holler-cache-control'),
+                $redis_status['active'] ? '✅' : '❌'
+            )
         ));
 
-        // Add Redis cache controls
+        if ($cloudflare_status['active']) {
+            $wp_admin_bar->add_menu(array(
+                'parent' => 'holler-cache-status',
+                'id' => 'holler-cloudflare-status',
+                'title' => sprintf(
+                    __('Cloudflare Cache: %s', 'holler-cache-control'),
+                    $cloudflare_status['active'] ? '✅' : '❌'
+                )
+            ));
+        }
+
+        if ($cloudflare_apo_status['active']) {
+            $wp_admin_bar->add_menu(array(
+                'parent' => 'holler-cache-status',
+                'id' => 'holler-cloudflare-apo-status',
+                'title' => sprintf(
+                    __('Cloudflare APO: %s', 'holler-cache-control'),
+                    $cloudflare_apo_status['active'] ? '✅' : '❌'
+                )
+            ));
+        }
+
+        // Add separator
         $wp_admin_bar->add_menu(array(
             'parent' => 'holler-cache-control',
-            'id' => 'wp-admin-bar-purge-redis',
-            'title' => sprintf(
-                '<a href="#" class="ab-item purge-cache" data-cache-type="redis">%s</a>',
-                __('Purge Redis Cache', 'holler-cache-control')
-            ),
-            'meta' => array('class' => 'purge-button')
+            'id' => 'holler-cache-separator',
+            'title' => ''
         ));
 
-        // Add Cloudflare cache controls
+        // Add purge cache submenu
         $wp_admin_bar->add_menu(array(
             'parent' => 'holler-cache-control',
-            'id' => 'wp-admin-bar-purge-cloudflare',
-            'title' => sprintf(
-                '<a href="#" class="ab-item purge-cache" data-cache-type="cloudflare">%s</a>',
-                __('Purge Cloudflare Cache', 'holler-cache-control')
-            ),
-            'meta' => array('class' => 'purge-button')
+            'id' => 'holler-purge-cache',
+            'title' => __('Purge Cache', 'holler-cache-control')
         ));
 
-        // Add Cloudflare APO cache controls
+        // Add purge all caches option first
+        $nonce = wp_create_nonce('holler_purge_all');
         $wp_admin_bar->add_menu(array(
-            'parent' => 'holler-cache-control',
-            'id' => 'wp-admin-bar-purge-cloudflare-apo',
-            'title' => sprintf(
-                '<a href="#" class="ab-item purge-cache" data-cache-type="cloudflare-apo">%s</a>',
-                __('Purge Cloudflare APO Cache', 'holler-cache-control')
-            ),
-            'meta' => array('class' => 'purge-button')
+            'parent' => 'holler-purge-cache',
+            'id' => 'holler-purge-all',
+            'title' => '<a href="#" class="holler-purge-cache" data-cache-type="all">' . 
+                      __('Purge All Caches', 'holler-cache-control') . '</a>' .
+                      '<input type="hidden" id="holler-all-nonce" value="' . esc_attr($nonce) . '">'
         ));
 
-        // Add separator before settings link
+        // Add separator after purge all
+        $wp_admin_bar->add_menu(array(
+            'parent' => 'holler-purge-cache',
+            'id' => 'holler-purge-separator',
+            'title' => ''
+        ));
+
+        // Only show individual purge buttons for active caching services
+        if ($nginx_status['active']) {
+            $nonce = wp_create_nonce('holler_purge_nginx');
+            $wp_admin_bar->add_menu(array(
+                'parent' => 'holler-purge-cache',
+                'id' => 'holler-purge-nginx',
+                'title' => '<a href="#" class="holler-purge-cache" data-cache-type="nginx">' . 
+                          __('Purge Nginx Page Cache', 'holler-cache-control') . '</a>' .
+                          '<input type="hidden" id="holler-nginx-nonce" value="' . esc_attr($nonce) . '">'
+            ));
+        }
+
+        if ($redis_status['active']) {
+            $nonce = wp_create_nonce('holler_purge_redis');
+            $wp_admin_bar->add_menu(array(
+                'parent' => 'holler-purge-cache',
+                'id' => 'holler-purge-redis',
+                'title' => '<a href="#" class="holler-purge-cache" data-cache-type="redis">' . 
+                          __('Purge Redis Object Cache', 'holler-cache-control') . '</a>' .
+                          '<input type="hidden" id="holler-redis-nonce" value="' . esc_attr($nonce) . '">'
+            ));
+        }
+
+        if ($cloudflare_status['active']) {
+            $nonce = wp_create_nonce('holler_purge_cloudflare');
+            $wp_admin_bar->add_menu(array(
+                'parent' => 'holler-purge-cache',
+                'id' => 'holler-purge-cloudflare',
+                'title' => '<a href="#" class="holler-purge-cache" data-cache-type="cloudflare">' . 
+                          __('Purge Cloudflare Cache', 'holler-cache-control') . '</a>' .
+                          '<input type="hidden" id="holler-cloudflare-nonce" value="' . esc_attr($nonce) . '">'
+            ));
+        }
+
+        if ($cloudflare_apo_status['active']) {
+            $nonce = wp_create_nonce('holler_purge_cloudflare_apo');
+            $wp_admin_bar->add_menu(array(
+                'parent' => 'holler-purge-cache',
+                'id' => 'holler-purge-cloudflare-apo',
+                'title' => '<a href="#" class="holler-purge-cache" data-cache-type="cloudflare-apo">' . 
+                          __('Purge Cloudflare APO', 'holler-cache-control') . '</a>' .
+                          '<input type="hidden" id="holler-cloudflare-apo-nonce" value="' . esc_attr($nonce) . '">'
+            ));
+        }
+
+        // Add another separator
         $wp_admin_bar->add_menu(array(
             'parent' => 'holler-cache-control',
-            'id' => 'cache-control-separator',
-            'title' => '<hr style="margin: 5px 0; border: 0; border-top: 1px solid rgba(255,255,255,0.2);">',
-            'meta' => array('class' => 'separator')
+            'id' => 'holler-cache-separator-2',
+            'title' => ''
         ));
 
         // Add settings link
         $wp_admin_bar->add_menu(array(
             'parent' => 'holler-cache-control',
-            'id' => 'cache-control-settings',
+            'id' => 'holler-cache-settings',
             'title' => __('Settings', 'holler-cache-control'),
             'href' => admin_url('admin.php?page=holler-cache-control')
         ));
+    }
+
+    private function is_plugin_admin_page($hook) {
+        return strpos($hook, 'holler-cache-control') !== false;
     }
 }

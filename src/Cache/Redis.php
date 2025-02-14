@@ -39,46 +39,85 @@ class Redis {
     public static function get_status() {
         $result = array(
             'active' => false,
-            'details' => ''
+            'message' => '',
+            'details' => '',
+            'type' => 'redis'
         );
 
         try {
-            $redis = new \Redis();
-            if (!$redis->connect('127.0.0.1', 6379)) {
-                $result['details'] = __('Could not connect to Redis server', 'holler-cache-control');
+            // First check if Redis object cache is enabled in WordPress
+            global $wp_object_cache;
+            
+            if (!is_object($wp_object_cache) || 
+                !method_exists($wp_object_cache, 'redis_instance') ||
+                !method_exists($wp_object_cache, 'redis_status')) {
+                $result['message'] = __('Redis Object Cache not enabled', 'holler-cache-control');
                 return $result;
             }
 
-            $info = $redis->info();
+            // Get Redis status from wp-redis plugin
+            $redis_status = $wp_object_cache->redis_status();
+            if (!$redis_status) {
+                $result['message'] = __('Redis Object Cache not connected', 'holler-cache-control');
+                return $result;
+            }
+
+            // Try to get Redis instance
+            $redis = $wp_object_cache->redis_instance();
+            if (!$redis) {
+                $result['message'] = __('Redis Object Cache not connected', 'holler-cache-control');
+                return $result;
+            }
+
+            // Check if Redis is responding
+            if ($redis->ping() !== true && $redis->ping() !== '+PONG') {
+                $result['message'] = __('Redis server not responding', 'holler-cache-control');
+                return $result;
+            }
+
+            // Get the key prefix/salt
+            $prefix = defined('WP_REDIS_KEY_SALT') ? WP_REDIS_KEY_SALT : '';
+            if (empty($prefix) && defined('WP_REDIS_PREFIX')) {
+                $prefix = WP_REDIS_PREFIX;
+            }
+
+            if (empty($prefix)) {
+                $result['message'] = __('Redis Object Cache plugin not configured properly', 'holler-cache-control');
+                return $result;
+            }
+
+            // Count WordPress Redis keys
+            $cursor = 0;
+            $keyCount = 0;
             
-            // Count WordPress object cache keys
-            $wp_keys = 0;
-            $iterator = null;
-            while ($keys = $redis->scan($iterator, 'wp_*', 100)) {
-                $wp_keys += count($keys);
-            }
+            do {
+                // Use SCAN with string pattern for compatibility
+                $scanResult = $redis->scan($cursor, $prefix . '*', 100);
+                if (!$scanResult) {
+                    break;
+                }
+                
+                $cursor = $scanResult[0];
+                $keys = $scanResult[1];
+                
+                if (is_array($keys)) {
+                    $keyCount += count($keys);
+                }
+            } while ($cursor != 0);
 
-            // Count GridPane page cache keys
-            $page_keys = 0;
-            $iterator = null;
-            while ($keys = $redis->scan($iterator, 'nginx-cache:*', 100)) {
-                $page_keys += count($keys);
-            }
+            // Set success status
+            $result['active'] = true;
+            $result['message'] = __('Running', 'holler-cache-control');
+            $result['details'] = sprintf(
+                __('Redis Object Cache active with %d keys', 'holler-cache-control'),
+                $keyCount
+            );
 
-            if ($wp_keys > 0 || $page_keys > 0) {
-                $result['active'] = true;
-                $result['details'] = sprintf(
-                    __('Redis Cache | Memory: %s | Object Keys: %d | Page Keys: %d', 'holler-cache-control'),
-                    size_format($info['used_memory']),
-                    $wp_keys,
-                    $page_keys
-                );
-            } else {
-                $result['details'] = __('Redis is running but no cache keys found', 'holler-cache-control');
-            }
         } catch (\Exception $e) {
-            error_log('Redis status error: ' . $e->getMessage());
-            $result['details'] = 'redis: ' . $e->getMessage();
+            $result['message'] = sprintf(
+                __('Redis Error: %s', 'holler-cache-control'),
+                $e->getMessage()
+            );
         }
 
         return $result;
@@ -89,49 +128,91 @@ class Redis {
      *
      * @return array
      */
-    public static function purge_cache() {
+    public static function purge() {
         $result = array(
             'success' => false,
             'message' => ''
         );
 
         try {
-            $redis = new \Redis();
-            if (!$redis->connect('127.0.0.1', 6379)) {
-                throw new \Exception(__('Could not connect to Redis server', 'holler-cache-control'));
+            // First try using WP Redis plugin's flush method if available
+            global $wp_object_cache;
+            
+            if (
+                is_object($wp_object_cache) && 
+                method_exists($wp_object_cache, 'redis_instance') &&
+                method_exists($wp_object_cache, 'flush')
+            ) {
+                $wp_object_cache->flush();
+                $result['success'] = true;
+                $result['message'] = __('Successfully cleared Redis object cache', 'holler-cache-control');
+                return $result;
             }
 
-            // First try to purge object cache if Redis Object Cache plugin is active
-            if (is_plugin_active('redis-cache/redis-cache.php')) {
-                // Use the plugin's purge method if available
-                if (function_exists('wp_cache_flush')) {
-                    wp_cache_flush();
+            // Fallback to manual Redis connection
+            $redis = self::get_redis_connection();
+            if (!$redis) {
+                $result['message'] = __('Could not connect to Redis server', 'holler-cache-control');
+                return $result;
+            }
+
+            // Check if Redis is responding
+            if ($redis->ping() !== true && $redis->ping() !== '+PONG') {
+                $result['message'] = __('Redis server not responding', 'holler-cache-control');
+                return $result;
+            }
+
+            // Get the key prefix/salt
+            $prefix = defined('WP_REDIS_KEY_SALT') ? WP_REDIS_KEY_SALT : '';
+            if (empty($prefix) && defined('WP_REDIS_PREFIX')) {
+                $prefix = WP_REDIS_PREFIX;
+            }
+
+            if (empty($prefix)) {
+                $result['message'] = __('Redis Object Cache plugin not configured properly', 'holler-cache-control');
+                return $result;
+            }
+
+            // Use SCAN instead of KEYS for better performance
+            $cursor = null;
+            $deleted = 0;
+            
+            do {
+                // Scan for keys matching our prefix
+                $scanResult = $redis->scan($cursor, array(
+                    'match' => $prefix . '*',
+                    'count' => 100
+                ));
+                
+                // Update cursor for next iteration
+                $cursor = $scanResult[0];
+                $keys = $scanResult[1];
+                
+                // Delete found keys
+                if (!empty($keys)) {
+                    foreach ($keys as $key) {
+                        if ($redis->del($key)) {
+                            $deleted++;
+                        }
+                    }
                 }
+            } while ($cursor != 0);
+
+            if ($deleted > 0) {
+                $result['success'] = true;
+                $result['message'] = sprintf(
+                    __('Successfully cleared %d Redis keys', 'holler-cache-control'),
+                    $deleted
+                );
+            } else {
+                $result['message'] = __('No Redis keys found to clear', 'holler-cache-control');
             }
 
-            // Now purge GridPane's Redis object cache directly
-            $iterator = null;
-            $pattern = 'wp_*'; // WordPress object cache keys
-            while ($keys = $redis->scan($iterator, $pattern, 100)) {
-                foreach ($keys as $key) {
-                    $redis->del($key);
-                }
-            }
-
-            // Also purge GridPane's Redis page cache
-            $iterator = null;
-            $pattern = 'nginx-cache:*'; // GridPane's Redis page cache keys
-            while ($keys = $redis->scan($iterator, $pattern, 100)) {
-                foreach ($keys as $key) {
-                    $redis->del($key);
-                }
-            }
-
-            $result['success'] = true;
-            $result['message'] = __('Redis cache purged successfully', 'holler-cache-control');
         } catch (\Exception $e) {
-            error_log('Redis purge error: ' . $e->getMessage());
-            $result['message'] = 'redis: ' . $e->getMessage();
+            $result['message'] = sprintf(
+                __('Redis Error: %s', 'holler-cache-control'),
+                $e->getMessage()
+            );
         }
 
         return $result;

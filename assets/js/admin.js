@@ -2,11 +2,11 @@ jQuery(document).ready(function($) {
     // Update cache status in admin bar
     function updateCacheStatus() {
         $.ajax({
-            url: hollerCacheControl.ajax_url,
+            url: ajaxurl,
             type: 'POST',
             data: {
                 action: 'holler_cache_control_status',
-                nonce: hollerCacheControl.nonce
+                _wpnonce: hollerCacheControl.nonces.status
             },
             success: function(response) {
                 if (!response.success) {
@@ -111,24 +111,24 @@ jQuery(document).ready(function($) {
     }
 
     // Purge cache function
-    function purgeCache(type, $button) {
-        console.log('Purging cache:', type); // Debug log
+    function purgeCache(cacheType, $button) {
+        console.log('Purging cache:', cacheType); // Debug log
         const originalText = $button.text();
         
         $button.prop('disabled', true).text(hollerCacheControl.i18n.purging);
         
         $.ajax({
-            url: hollerCacheControl.ajax_url,
+            url: ajaxurl,
             type: 'POST',
             data: {
-                action: 'holler_cache_control_purge',
-                cache_type: type,
-                nonce: hollerCacheControl.nonce
+                action: 'holler_purge_' + cacheType,
+                type: cacheType,
+                _ajax_nonce: hollerCacheControl.nonces[cacheType]
             },
             success: function(response) {
                 console.log('Purge response:', response); // Debug log
                 if (response.success) {
-                    showNotice(response.data, 'success');
+                    showNotice('Success: ' + response.data, 'success');
                     $button.text(hollerCacheControl.i18n.purged);
                 } else {
                     // Check if the message contains "cleared" or "purged" - these are actually successes
@@ -193,9 +193,9 @@ jQuery(document).ready(function($) {
         $submitButton.val('Saving...').prop('disabled', true);
 
         $.ajax({
-            url: hollerCacheControl.ajax_url,
+            url: ajaxurl,
             type: 'POST',
-            data: $form.serialize() + '&action=holler_cache_control_save_settings&nonce=' + hollerCacheControl.nonce,
+            data: $form.serialize() + '&action=holler_cache_control_save_settings&_wpnonce=' + hollerCacheControl.nonces.settings,
             success: function(response) {
                 if (response.success) {
                     showNotice('Settings saved successfully!', 'success');
@@ -216,5 +216,112 @@ jQuery(document).ready(function($) {
                 }, 2000);
             }
         });
+    });
+
+    // Handle purge button clicks
+    $('.holler-purge-cache').on('click', function(e) {
+        e.preventDefault();
+        var cacheType = $(this).data('cache-type');
+        purgeCache(cacheType, $(this));
+    });
+
+    // Show admin notice
+    function showAdminNotice(message, type) {
+        var notice = $('<div class="notice notice-' + type + ' is-dismissible"><p>' + message + '</p></div>');
+        var $wrap = $('.wrap h1');
+        if ($wrap.length === 0) {
+            $wrap = $('#wpbody-content');
+        }
+        $wrap.after(notice);
+        
+        // Add dismiss button and functionality
+        var dismissButton = $('<button type="button" class="notice-dismiss"><span class="screen-reader-text">Dismiss this notice.</span></button>');
+        notice.append(dismissButton);
+        
+        dismissButton.on('click', function() {
+            notice.fadeOut(300, function() { $(this).remove(); });
+        });
+        
+        // Auto dismiss after 5 seconds
+        setTimeout(function() {
+            notice.fadeOut(300, function() { $(this).remove(); });
+        }, 5000);
+    }
+
+    // Update cache status periodically
+    function updateCacheStatus() {
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'holler_cache_status',
+                _ajax_nonce: hollerCacheControl.nonces.status
+            },
+            success: function(response) {
+                if (response.success) {
+                    updateStatusDisplay(response.data);
+                }
+            },
+            complete: function() {
+                setTimeout(updateCacheStatus, 30000); // Update every 30 seconds
+            }
+        });
+    }
+
+    // Update status display
+    function updateStatusDisplay(statuses) {
+        Object.keys(statuses).forEach(function(type) {
+            var status = statuses[type];
+            var $statusElement = $('#holler-' + type + '-status');
+            if ($statusElement.length) {
+                $statusElement.html(status.active ? '✅' : '❌');
+            }
+        });
+    }
+
+    // Start status updates if we're on the admin page
+    if ($('.holler-cache-control-wrap').length) {
+        updateCacheStatus();
+    }
+
+    // Purge all caches function
+    function purgeAllCaches($button) {
+        console.log('Purging all caches'); // Debug log
+        const originalText = $button.text();
+        $button.prop('disabled', true).text(hollerCacheControl.i18n.purging);
+
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'holler_purge_all_caches',
+                _ajax_nonce: hollerCacheControl.nonces.all_caches
+            },
+            success: function(response) {
+                console.log('Purge response:', response); // Debug log
+                if (response.success) {
+                    showNotice('Success: ' + response.data, 'success');
+                } else {
+                    showNotice(response.data || 'Unknown error occurred', 'error');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.log('Purge error:', error); // Debug log
+                showNotice(error || 'Failed to purge cache', 'error');
+            },
+            complete: function() {
+                $button.prop('disabled', false).text(originalText);
+                updateCacheStatus(); // Update status after purge
+            }
+        });
+    }
+
+    // Handle purge all caches button clicks
+    $('.holler-purge-all-caches').on('click', function(e) {
+        e.preventDefault();
+        let confirmMessage = hollerCacheControl.i18n.confirm_purge_all;
+        if (confirm(confirmMessage)) {
+            purgeAllCaches($(this));
+        }
     });
 });

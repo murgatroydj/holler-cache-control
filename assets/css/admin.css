@@ -159,6 +159,145 @@
     border-top: 1px solid rgba(255,255,255,0.2);
 }
 
+/* Admin bar menu styles */
+#wp-admin-bar-holler-cache-control .ab-submenu {
+    min-width: 240px !important;
+    padding: 6px 0 !important;
+}
+
+#wp-admin-bar-holler-cache-control .ab-item {
+    height: auto !important;
+    line-height: 2em !important;
+    padding: 0 12px !important;
+}
+
+/* Separator styles */
+#wp-admin-bar-holler-cache-separator,
+#wp-admin-bar-holler-cache-separator-2,
+#wp-admin-bar-holler-purge-separator {
+    height: 1px !important;
+    margin: 6px 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    background: rgba(255,255,255,0.2) !important;
+}
+
+#wp-admin-bar-holler-cache-separator .ab-item,
+#wp-admin-bar-holler-cache-separator-2 .ab-item,
+#wp-admin-bar-holler-purge-separator .ab-item {
+    padding: 0 !important;
+    height: 1px !important;
+    line-height: 1px !important;
+    background: rgba(255,255,255,0.2) !important;
+}
+
+/* Status submenu styles */
+#wp-admin-bar-holler-cache-status {
+    font-weight: bold;
+}
+
+#wp-admin-bar-holler-cache-status .ab-submenu .ab-item {
+    padding-left: 24px !important;
+}
+
+/* Purge buttons */
+.holler-purge-cache {
+    display: block !important;
+    padding: 4px 0 !important;
+    color: inherit !important;
+    text-decoration: none !important;
+}
+
+.holler-purge-cache:hover {
+    color: #00b9eb !important;
+}
+
+#wp-admin-bar-holler-purge-all .holler-purge-cache {
+    font-weight: bold;
+}
+
+/* Admin page styles */
+.holler-cache-control-wrap {
+    margin: 10px 20px 0 2px;
+}
+
+.holler-cache-control-wrap .notice {
+    margin: 20px 0;
+}
+
+.holler-cache-status {
+    margin: 20px 0;
+    padding: 20px;
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+}
+
+.holler-cache-status h2 {
+    margin-top: 0;
+}
+
+.holler-cache-status-item {
+    margin: 10px 0;
+    padding: 10px;
+    background: #f8f9f9;
+    border: 1px solid #e5e5e5;
+}
+
+.holler-cache-status-item h3 {
+    margin: 0 0 10px 0;
+}
+
+.holler-cache-status-item p {
+    margin: 5px 0;
+}
+
+.holler-cache-status-active {
+    color: #46b450;
+}
+
+.holler-cache-status-inactive {
+    color: #dc3232;
+}
+
+/* Notifications */
+.notice {
+    position: relative;
+    padding: 10px 40px 10px 15px;
+}
+
+.notice p {
+    margin: 0;
+}
+
+.notice-dismiss {
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
+    padding: 0;
+    cursor: pointer;
+    background: none;
+    border: none;
+    color: #72777c;
+}
+
+.notice-dismiss:hover {
+    color: #dc3232;
+}
+
+.notice-dismiss:before {
+    content: "\f153";
+    display: block;
+    font: normal 16px/20px dashicons;
+    speak: never;
+    height: 20px;
+    text-align: center;
+    width: 20px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
 /* Admin page styles */
 .holler-cache-control-wrap .status-box {
     background: #fff;
@@ -205,42 +344,4 @@
 
 .holler-cache-control-wrap .button-group .button {
     margin-right: 10px;
-}
-
-/* Notifications */
-.notice {
-    position: relative;
-    padding: 10px 40px 10px 15px;
-}
-
-.notice p {
-    margin: 0;
-}
-
-.notice-dismiss {
-    position: absolute;
-    top: 50%;
-    right: 10px;
-    transform: translateY(-50%);
-    padding: 0;
-    cursor: pointer;
-    background: none;
-    border: none;
-    color: #72777c;
-}
-
-.notice-dismiss:hover {
-    color: #dc3232;
-}
-
-.notice-dismiss:before {
-    content: "\f153";
-    display: block;
-    font: normal 16px/20px dashicons;
-    speak: never;
-    height: 20px;
-    text-align: center;
-    width: 20px;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
 }

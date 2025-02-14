@@ -73,20 +73,18 @@ $using_constants = (
                     <strong><?php _e('Status', 'holler-cache-control'); ?>:</strong>
                     <span class="<?php echo esc_attr($nginx_class); ?>"><?php echo esc_html($nginx_text); ?></span>
                 </p>
+                <?php if (!empty($nginx_details)): ?>
+                    <p><strong><?php _e('Details', 'holler-cache-control'); ?>:</strong> <?php echo esc_html($nginx_details); ?></p>
+                <?php endif; ?>
                 <?php if ($nginx_status['active']): ?>
                     <?php if ($nginx_type): ?>
                         <p><strong><?php _e('Type', 'holler-cache-control'); ?>:</strong> <?php echo esc_html($nginx_type); ?></p>
                     <?php endif; ?>
-                    <?php if ($nginx_details): ?>
-                        <p><strong><?php _e('Details', 'holler-cache-control'); ?>:</strong> <?php echo esc_html($nginx_details); ?></p>
-                    <?php endif; ?>
+                    <button class="button purge-cache" data-cache-type="nginx">
+                        <?php _e('Purge Nginx Cache', 'holler-cache-control'); ?>
+                    </button>
                 <?php endif; ?>
             </div>
-            <?php if ($nginx_status['active']): ?>
-                <button class="button purge-cache" data-cache-type="nginx">
-                    <?php _e('Purge Nginx Cache', 'holler-cache-control'); ?>
-                </button>
-            <?php endif; ?>
         </div>
 
         <!-- Redis Object Cache -->
@@ -103,20 +101,18 @@ $using_constants = (
                     <strong><?php _e('Status', 'holler-cache-control'); ?>:</strong>
                     <span class="<?php echo esc_attr($redis_class); ?>"><?php echo esc_html($redis_text); ?></span>
                 </p>
+                <?php if (!empty($redis_details)): ?>
+                    <p><strong><?php _e('Details', 'holler-cache-control'); ?>:</strong> <?php echo esc_html($redis_details); ?></p>
+                <?php endif; ?>
                 <?php if ($redis_status['active']): ?>
                     <?php if ($redis_type): ?>
                         <p><strong><?php _e('Type', 'holler-cache-control'); ?>:</strong> <?php echo esc_html($redis_type); ?></p>
                     <?php endif; ?>
-                    <?php if ($redis_details): ?>
-                        <p><strong><?php _e('Details', 'holler-cache-control'); ?>:</strong> <?php echo esc_html($redis_details); ?></p>
-                    <?php endif; ?>
+                    <button class="button purge-cache" data-cache-type="redis">
+                        <?php _e('Purge Redis Cache', 'holler-cache-control'); ?>
+                    </button>
                 <?php endif; ?>
             </div>
-            <?php if ($redis_status['active']): ?>
-                <button class="button purge-cache" data-cache-type="redis">
-                    <?php _e('Purge Redis Cache', 'holler-cache-control'); ?>
-                </button>
-            <?php endif; ?>
         </div>
 
         <!-- Cloudflare Cache -->
@@ -140,12 +136,12 @@ $using_constants = (
                     <strong><?php _e('Status', 'holler-cache-control'); ?>:</strong>
                     <span class="<?php echo esc_attr($cloudflare_class); ?>"><?php echo esc_html($cloudflare_text); ?></span>
                 </p>
+                <?php if (!empty($cloudflare_details)): ?>
+                    <p><strong><?php _e('Details', 'holler-cache-control'); ?>:</strong> <?php echo esc_html($cloudflare_details); ?></p>
+                <?php endif; ?>
                 <?php if ($cloudflare_status['active']): ?>
                     <?php if ($cloudflare_type): ?>
                         <p><strong><?php _e('Type', 'holler-cache-control'); ?>:</strong> <?php echo esc_html($cloudflare_type); ?></p>
-                    <?php endif; ?>
-                    <?php if ($cloudflare_details): ?>
-                        <p><strong><?php _e('Details', 'holler-cache-control'); ?>:</strong> <?php echo esc_html($cloudflare_details); ?></p>
                     <?php endif; ?>
                     <p class="status">
                         <span class="status-label"><?php _e('Cache Level:', 'holler-cache-control'); ?></span>
@@ -163,13 +159,11 @@ $using_constants = (
                         <span class="status-label"><?php _e('SSL:', 'holler-cache-control'); ?></span>
                         <?php echo isset($cloudflare_status['ssl']) ? esc_html($cloudflare_status['ssl']) : __('Not Available', 'holler-cache-control'); ?>
                     </p>
+                    <button class="button purge-cache" data-cache-type="cloudflare">
+                        <?php _e('Purge Cloudflare Cache', 'holler-cache-control'); ?>
+                    </button>
                 <?php endif; ?>
             </div>
-            <?php if ($cloudflare_status['active']): ?>
-                <button class="button purge-cache" data-cache-type="cloudflare">
-                    <?php _e('Purge Cloudflare Cache', 'holler-cache-control'); ?>
-                </button>
-            <?php endif; ?>
         </div>
 
         <!-- Cloudflare APO -->
@@ -186,12 +180,12 @@ $using_constants = (
                     <strong><?php _e('Status', 'holler-cache-control'); ?>:</strong>
                     <span class="<?php echo esc_attr($cloudflare_apo_class); ?>"><?php echo esc_html($cloudflare_apo_text); ?></span>
                 </p>
+                <?php if (!empty($cloudflare_apo_details)): ?>
+                    <p><strong><?php _e('Details', 'holler-cache-control'); ?>:</strong> <?php echo esc_html($cloudflare_apo_details); ?></p>
+                <?php endif; ?>
                 <?php if ($cloudflare_apo_status['active']): ?>
                     <?php if ($cloudflare_apo_type): ?>
                         <p><strong><?php _e('Type', 'holler-cache-control'); ?>:</strong> <?php echo esc_html($cloudflare_apo_type); ?></p>
-                    <?php endif; ?>
-                    <?php if ($cloudflare_apo_details): ?>
-                        <p><strong><?php _e('Details', 'holler-cache-control'); ?>:</strong> <?php echo esc_html($cloudflare_apo_details); ?></p>
                     <?php endif; ?>
                     <p class="status">
                         <span class="status-label"><?php _e('Cache by Device:', 'holler-cache-control'); ?></span>
@@ -205,13 +199,11 @@ $using_constants = (
                         <span class="status-label"><?php _e('No HTML Minify:', 'holler-cache-control'); ?></span>
                         <?php echo isset($cloudflare_apo_status['no_html_minify']) && $cloudflare_apo_status['no_html_minify'] ? __('Yes', 'holler-cache-control') : __('No', 'holler-cache-control'); ?>
                     </p>
+                    <button class="button purge-cache" data-cache-type="cloudflare-apo">
+                        <?php _e('Purge APO Cache', 'holler-cache-control'); ?>
+                    </button>
                 <?php endif; ?>
             </div>
-            <?php if ($cloudflare_apo_status['active']): ?>
-                <button class="button purge-cache" data-cache-type="cloudflare-apo">
-                    <?php _e('Purge APO Cache', 'holler-cache-control'); ?>
-                </button>
-            <?php endif; ?>
         </div>
     </div>
 

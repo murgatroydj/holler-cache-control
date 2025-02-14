@@ -94,63 +94,49 @@ class CloudflareAPO {
      *
      * @return array
      */
-    public static function purge_cache() {
-        $credentials = Cloudflare::get_credentials();
-        
-        if (!Cloudflare::are_credentials_set()) {
-            return array(
-                'success' => false,
-                'message' => __('Cloudflare APO is not configured', 'holler-cache-control')
-            );
-        }
-
-        // First check if APO is enabled
-        $status = self::get_status();
-        error_log('APO Status Check for Purge: ' . print_r($status, true));
-
-        if (!$status['active']) {
-            return array(
-                'success' => false,
-                'message' => __('Cloudflare APO is not enabled', 'holler-cache-control')
-            );
-        }
-
-        // Purge APO cache using the purge_cache endpoint
-        $response = wp_remote_post(
-            "https://api.cloudflare.com/client/v4/zones/{$credentials['zone_id']}/purge_cache",
-            array(
-                'headers' => array(
-                    'X-Auth-Email' => $credentials['email'],
-                    'X-Auth-Key' => $credentials['api_key'],
-                    'Content-Type' => 'application/json'
-                ),
-                'body' => json_encode(array(
-                    'purge_everything' => true
-                ))
-            )
+    public static function purge() {
+        $result = array(
+            'success' => false,
+            'message' => ''
         );
 
-        error_log('APO Purge Response: ' . print_r(wp_remote_retrieve_body($response), true));
+        try {
+            $credentials = \HollerCacheControl\Cache\Cloudflare::get_credentials();
+            if (!$credentials['valid']) {
+                throw new \Exception(__('Cloudflare credentials not configured', 'holler-cache-control'));
+            }
 
-        if (is_wp_error($response)) {
-            return array(
-                'success' => false,
-                'message' => $response->get_error_message()
+            // Purge APO cache using the purge_cache endpoint
+            $response = wp_remote_post(
+                "https://api.cloudflare.com/client/v4/zones/{$credentials['zone_id']}/purge_cache",
+                array(
+                    'headers' => array(
+                        'X-Auth-Email' => $credentials['email'],
+                        'X-Auth-Key'   => $credentials['api_key'],
+                        'Content-Type' => 'application/json'
+                    ),
+                    'body' => json_encode(array(
+                        'hosts' => array(parse_url(home_url(), PHP_URL_HOST))
+                    ))
+                )
             );
+
+            if (is_wp_error($response)) {
+                throw new \Exception($response->get_error_message());
+            }
+
+            $body = json_decode(wp_remote_retrieve_body($response), true);
+            if (!$body['success']) {
+                throw new \Exception(isset($body['errors'][0]['message']) ? $body['errors'][0]['message'] : __('Unknown Cloudflare error', 'holler-cache-control'));
+            }
+
+            $result['success'] = true;
+            $result['message'] = __('Cloudflare APO cache cleared successfully', 'holler-cache-control');
+
+        } catch (\Exception $e) {
+            $result['message'] = $e->getMessage();
         }
 
-        $body = json_decode(wp_remote_retrieve_body($response), true);
-
-        if (empty($body) || !isset($body['success']) || !$body['success']) {
-            return array(
-                'success' => false,
-                'message' => isset($body['errors'][0]['message']) ? $body['errors'][0]['message'] : __('API Error', 'holler-cache-control')
-            );
-        }
-
-        return array(
-            'success' => true,
-            'message' => __('APO cache purged successfully', 'holler-cache-control')
-        );
+        return $result;
     }
 }

@@ -9,8 +9,8 @@
  * @wordpress-plugin
  * Plugin Name:       Holler Cache Control
  * Plugin URI:        https://hollerdigital.com
- * Description:       Control and purge various caching systems including Nginx FastCGI, Redis, and Cloudflare
- * Version:           1.1.0
+ * Description:       Control and purge various caching systems including Nginx, Redis, and Cloudflare
+ * Version:           1.2.0
  * Author:            Holler Digital
  * Author URI:        https://hollerdigital.com
  * License:           GPL-2.0+
@@ -25,7 +25,7 @@ if (!defined('WPINC')) {
 }
 
 // Define plugin version
-define('HOLLER_CACHE_CONTROL_VERSION', '1.1.0');
+define('HOLLER_CACHE_CONTROL_VERSION', '1.2.0');
 
 // Load required files - these need to be loaded before the autoloader
 require_once plugin_dir_path(__FILE__) . 'src/Core/Loader.php';
