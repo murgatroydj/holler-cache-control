@@ -1,0 +1,246 @@
+/* Cache Control Tools Page Styles */
+.cache-status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    margin: 20px 0;
+}
+
+.cache-status-card {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+    padding: 20px;
+    border-radius: 4px;
+}
+
+.cache-status-card.active {
+    border-left: 4px solid #46b450;
+}
+
+.cache-status-card.inactive {
+    border-left: 4px solid #dc3232;
+    opacity: 0.7;
+}
+
+.cache-status-card h2 {
+    margin: 0 0 15px 0;
+    padding: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.cache-status-card .status {
+    margin: 8px 0;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.cache-status-card .status-label {
+    font-weight: 600;
+    margin-right: 5px;
+}
+
+.cache-status-card button {
+    margin-top: 15px;
+}
+
+.cache-actions {
+    margin: 20px 0;
+    text-align: center;
+}
+
+.cache-actions .button-hero {
+    min-width: 200px;
+}
+
+.cache-stats {
+    margin: 20px 0;
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f1;
+}
+
+.stat-item:last-child {
+    border-bottom: none;
+}
+
+.stat-item label {
+    color: #646970;
+}
+
+.card-actions {
+    margin-top: 20px;
+    text-align: right;
+}
+
+.cache-settings {
+    margin: 30px 0;
+    max-width: 800px;
+}
+
+/* Loading state for buttons */
+.purge-cache.loading {
+    position: relative;
+    color: transparent !important;
+    pointer-events: none;
+}
+
+.purge-cache.loading::after {
+    content: '';
+    position: absolute;
+    width: 1em;
+    height: 1em;
+    border: 2px solid rgba(255,255,255,.2);
+    border-left-color: #fff;
+    border-radius: 50%;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    animation: spin 1s infinite linear;
+}
+
+@keyframes spin {
+    to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* Admin Bar Button */
+#wp-admin-bar-holler-cache-control .ab-icon::before {
+    content: '\f463';
+    top: 2px;
+}
+
+#wp-admin-bar-holler-cache-control.loading .ab-icon::before {
+    animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+#wp-admin-bar-holler-cache-control .ab-icon {
+    margin-right: 5px !important;
+}
+
+#wp-admin-bar-holler-cache-control .status-indicator {
+    display: inline-block;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-size: 11px;
+    line-height: 1.2;
+    margin-left: 5px;
+}
+
+#wp-admin-bar-holler-cache-control .status-indicator.active {
+    background-color: #46b450;
+    color: #fff;
+}
+
+#wp-admin-bar-holler-cache-control .status-indicator.inactive {
+    background-color: #dc3232;
+    color: #fff;
+}
+
+#wp-admin-bar-holler-cache-control .cache-status-header {
+    font-weight: bold;
+    color: #a0a5aa;
+}
+
+#wp-admin-bar-holler-cache-control .cache-status-item {
+    padding-left: 10px;
+}
+
+#wp-admin-bar-holler-cache-control .separator {
+    margin: 5px 0;
+    border-top: 1px solid rgba(255,255,255,0.2);
+}
+
+/* Admin page styles */
+.holler-cache-control-wrap .status-box {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.holler-cache-control-wrap .status-box h3 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.holler-cache-control-wrap .status-item {
+    margin-bottom: 10px;
+}
+
+.holler-cache-control-wrap .status-label {
+    font-weight: bold;
+    margin-right: 10px;
+}
+
+.holler-cache-control-wrap .status-value {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 3px;
+}
+
+.holler-cache-control-wrap .status-value.active {
+    background-color: #46b450;
+    color: #fff;
+}
+
+.holler-cache-control-wrap .status-value.inactive {
+    background-color: #dc3232;
+    color: #fff;
+}
+
+.holler-cache-control-wrap .button-group {
+    margin-top: 15px;
+}
+
+.holler-cache-control-wrap .button-group .button {
+    margin-right: 10px;
+}
+
+/* Notifications */
+.notice {
+    position: relative;
+    padding: 10px 40px 10px 15px;
+}
+
+.notice p {
+    margin: 0;
+}
+
+.notice-dismiss {
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
+    padding: 0;
+    cursor: pointer;
+    background: none;
+    border: none;
+    color: #72777c;
+}
+
+.notice-dismiss:hover {
+    color: #dc3232;
+}
+
+.notice-dismiss:before {
+    content: "\f153";
+    display: block;
+    font: normal 16px/20px dashicons;
+    speak: never;
+    height: 20px;
+    text-align: center;
+    width: 20px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}

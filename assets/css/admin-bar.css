@@ -1,0 +1,93 @@
+#wpadminbar #wp-admin-bar-holler-cache-control .ab-icon {
+    font-family: dashicons !important;
+    font-size: 20px !important;
+    line-height: 1 !important;
+    margin-right: 5px !important;
+    padding: 0 !important;
+    top: 6px !important;
+}
+
+#wpadminbar #wp-admin-bar-holler-cache-control .ab-icon:before {
+    content: "\f463" !important;
+    top: 0 !important;
+}
+
+#wpadminbar .holler-cache-purge-button.loading .ab-icon {
+    animation: holler-cache-spin 2s linear infinite;
+}
+
+@keyframes holler-cache-spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Style for success/error notices */
+body.wp-admin .holler-cache-notice {
+    position: fixed !important;
+    top: 52px !important; /* Adjusted for admin bar + margin */
+    right: 20px !important;
+    padding: 12px 24px !important;
+    color: #fff !important;
+    z-index: 999999 !important; /* Increased z-index for admin */
+    display: none;
+    border-radius: 3px !important;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2) !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif !important;
+    font-size: 14px !important;
+    line-height: 1.4 !important;
+    animation: holler-cache-slide-in 0.5s ease-out;
+}
+
+body:not(.wp-admin) .holler-cache-notice {
+    position: fixed !important;
+    top: 32px !important;
+    right: 20px !important;
+    padding: 12px 24px !important;
+    color: #fff !important;
+    z-index: 99999 !important;
+    display: none;
+    border-radius: 3px !important;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2) !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif !important;
+    font-size: 14px !important;
+    line-height: 1.4 !important;
+    animation: holler-cache-slide-in 0.5s ease-out;
+}
+
+/* Folded admin menu adjustment */
+body.wp-admin.folded .holler-cache-notice {
+    left: 36px !important;
+}
+
+/* Mobile admin menu adjustment */
+@media screen and (max-width: 782px) {
+    body.wp-admin .holler-cache-notice {
+        top: 46px !important;
+        left: 0 !important;
+        right: 0 !important;
+        border-radius: 0 !important;
+    }
+}
+
+.holler-cache-notice.success {
+    background-color: #46b450 !important;
+}
+
+.holler-cache-notice.error {
+    background-color: #dc3232 !important;
+}
+
+@keyframes holler-cache-slide-in {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
