@@ -85,9 +85,15 @@ class Redis {
             'details' => ''
         );
 
-        // Check if Redis Object Cache plugin is active
-        if (!defined('WP_REDIS_HOST')) {
-            $result['details'] = __('Redis is not configured', 'holler-cache-control');
+        // Check if Redis is available on the system
+        if (!class_exists('Redis')) {
+            $result['details'] = __('Redis PHP extension not installed', 'holler-cache-control');
+            return $result;
+        }
+
+        // Check if Redis Object Cache plugin is active and configured
+        if (!class_exists('Redis_Object_Cache') || !defined('WP_REDIS_HOST')) {
+            $result['details'] = __('Redis Object Cache plugin not configured', 'holler-cache-control');
             return $result;
         }
 
