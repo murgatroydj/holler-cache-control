@@ -88,70 +88,150 @@ class Tools {
             return;
         }
 
-        // Clear WordPress core caches
-        wp_cache_flush(); // Clear object cache
-        clean_post_cache(get_the_ID()); // Clear post cache if we're in a post context
-        clean_term_cache(array(), '', false); // Clear term cache
-        clean_user_cache(get_current_user_id()); // Clear current user cache
-        $this->delete_transient_cache(); // Clear transients
+        // Get cache status first to avoid unnecessary operations
+        $cache_status = self::get_cache_systems_status();
 
-        // Clear Elementor caches
-        $this->purge_elementor_cache();
+        // Set longer timeout for potentially slow operations
+        $timeout = ini_get('max_execution_time');
+        set_time_limit(300); // 5 minutes
 
-        // Clear Astra caches
-        $this->purge_astra_cache();
+        try {
+            // Clear WordPress core caches
+            wp_cache_flush();
+            
+            // Only clear post cache if we're in a post context
+            if (get_the_ID()) {
+                clean_post_cache(get_the_ID());
+            }
 
-        // Purge Nginx cache
-        $nginx_result = Nginx::purge_cache();
-        if (!$nginx_result['success']) {
-            error_log('Nginx cache purge failed: ' . $nginx_result['message']);
-        }
+            // Batch process term cache clearing
+            $terms = get_terms(array('hide_empty' => false, 'fields' => 'ids', 'number' => 100));
+            if (!is_wp_error($terms) && !empty($terms)) {
+                clean_term_cache($terms);
+            }
 
-        // Purge Redis cache
-        $redis_result = Redis::purge_cache();
-        if (!$redis_result['success']) {
-            error_log('Redis cache purge failed: ' . $redis_result['message']);
-        }
+            // Clear current user cache
+            if (is_user_logged_in()) {
+                clean_user_cache(get_current_user_id());
+            }
 
-        // Purge Cloudflare cache
-        $cloudflare_result = Cloudflare::purge_cache();
-        if (!$cloudflare_result['success']) {
-            error_log('Cloudflare cache purge failed: ' . $cloudflare_result['message']);
-        }
+            // Clear transients in batches
+            $this->delete_transient_cache();
 
-        // Purge Cloudflare APO cache
-        $cloudflare_apo_result = CloudflareAPO::purge_cache();
-        if (!$cloudflare_apo_result['success']) {
-            error_log('Cloudflare APO cache purge failed: ' . $cloudflare_apo_result['message']);
+            // Clear Elementor caches if active
+            if (class_exists('\Elementor\Plugin')) {
+                $this->purge_elementor_cache();
+            }
+
+            // Clear Astra caches if active
+            if (defined('ASTRA_THEME_VERSION')) {
+                $this->purge_astra_cache();
+            }
+
+            // Purge Nginx cache if active
+            if ($cache_status['nginx']['active']) {
+                $nginx_result = Nginx::purge_cache();
+                if (!$nginx_result['success']) {
+                    error_log('Nginx cache purge failed: ' . $nginx_result['message']);
+                }
+            }
+
+            // Purge Redis cache if active
+            if ($cache_status['redis']['active']) {
+                $redis_result = Redis::purge_cache();
+                if (!$redis_result['success']) {
+                    error_log('Redis cache purge failed: ' . $redis_result['message']);
+                }
+            }
+
+            // Purge Cloudflare cache if active
+            if ($cache_status['cloudflare']['active']) {
+                $cloudflare_result = Cloudflare::purge_cache();
+                if (!$cloudflare_result['success']) {
+                    error_log('Cloudflare cache purge failed: ' . $cloudflare_result['message']);
+                }
+            }
+
+            // Purge Cloudflare APO cache if active
+            if ($cache_status['cloudflare-apo']['active']) {
+                $cloudflare_apo_result = CloudflareAPO::purge_cache();
+                if (!$cloudflare_apo_result['success']) {
+                    error_log('Cloudflare APO cache purge failed: ' . $cloudflare_apo_result['message']);
+                }
+            }
+        } catch (\Exception $e) {
+            error_log('Cache purge error: ' . $e->getMessage());
+        } finally {
+            // Restore original timeout
+            set_time_limit($timeout);
         }
     }
 
     /**
-     * Purge Elementor-specific caches
+     * Clear Elementor cache
      */
     public function purge_elementor_cache() {
-        if (!current_user_can('manage_options')) {
+        if (!class_exists('\Elementor\Plugin')) {
             return;
         }
 
-        // Clear Elementor's CSS cache
-        if (class_exists('\Elementor\Plugin')) {
-            \Elementor\Plugin::$instance->files_manager->clear_cache();
+        try {
+            // Clear Elementor's CSS cache
+            $uploads_dir = wp_upload_dir();
+            $elementor_css_dir = $uploads_dir['basedir'] . '/elementor/css';
+            
+            if (is_dir($elementor_css_dir)) {
+                // Use shell commands for efficient directory cleanup
+                if (function_exists('shell_exec')) {
+                    // Remove min directory completely
+                    $min_dir = $elementor_css_dir . '/min';
+                    if (is_dir($min_dir)) {
+                        @shell_exec('rm -rf ' . escapeshellarg($min_dir));
+                    }
+                    
+                    // Remove all files in css directory but keep the directory itself
+                    @shell_exec('find ' . escapeshellarg($elementor_css_dir) . ' -type f -delete');
+                } else {
+                    // Fallback to PHP methods if shell_exec is not available
+                    $this->delete_directory_contents($elementor_css_dir);
+                }
+            }
+
+            // Clear Elementor's data cache
+            if (method_exists('\Elementor\Plugin', 'instance')) {
+                // Prevent Elementor from handling files directly
+                remove_action('elementor/core/files/clear_cache', array(\Elementor\Plugin::instance()->files_manager, 'clear_cache'));
+                // Clear other Elementor caches
+                \Elementor\Plugin::instance()->files_manager->clear_cache();
+            }
+        } catch (\Exception $e) {
+            error_log('Error clearing Elementor cache: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Delete contents of a directory
+     * @param string $dir Directory path
+     */
+    private function delete_directory_contents($dir) {
+        if (!is_dir($dir)) {
+            return;
         }
 
-        // Clear Elementor's "generated_css" folder
-        $upload_dir = wp_upload_dir();
-        $elementor_css_dir = $upload_dir['basedir'] . '/elementor/css';
-        if (is_dir($elementor_css_dir)) {
-            array_map('unlink', glob("$elementor_css_dir/*.*"));
-        }
+        try {
+            $files = glob($dir . '/*');
+            if ($files === false) {
+                return;
+            }
 
-        // Clear Elementor data cache
-        delete_post_meta_by_key('_elementor_css');
-        delete_post_meta_by_key('_elementor_data');
-        delete_option('_elementor_global_css');
-        delete_option('elementor-custom-breakpoints');
-        wp_cache_delete('elementor_selected_kit');
+            foreach ($files as $file) {
+                if (is_file($file)) {
+                    @unlink($file);
+                }
+            }
+        } catch (\Exception $e) {
+            error_log('Error deleting directory contents: ' . $e->getMessage());
+        }
     }
 
     /**
