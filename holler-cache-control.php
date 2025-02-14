@@ -75,7 +75,8 @@ function run_holler_cache_control() {
     });
 
     // Initialize plugin
-    new HollerCacheControl\Core\Plugin();
+    $plugin = new HollerCacheControl\Core\Plugin();
+    $plugin->run();
 }
 
 run_holler_cache_control();
