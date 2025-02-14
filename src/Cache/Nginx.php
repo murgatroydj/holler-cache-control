@@ -21,52 +21,52 @@ class Nginx {
 
         error_log("Checking page cache status");
         
-        // Check if FastCGI caching is enabled first
-        $cache_path = '/var/cache/nginx';
-        if (is_dir($cache_path)) {
-            try {
-                $size = self::get_directory_size($cache_path);
-                if ($size > 0) {
-                    error_log("FastCGI cache directory found with size: " . $size);
+        // Check if FastCGI caching is enabled first by checking config
+        $site_host = parse_url(home_url(), PHP_URL_HOST);
+        $nginx_conf = "/etc/nginx/common/{$site_host}-wpfc.conf";
+        
+        error_log("Checking FastCGI config at: " . $nginx_conf);
+        if (file_exists($nginx_conf)) {
+            error_log("FastCGI config exists");
+            
+            // Make a test request to check headers
+            $url = home_url('/');
+            error_log("Making test request to: " . $url);
+            
+            $args = array(
+                'method' => 'GET',
+                'headers' => array(
+                    'Host' => $site_host,
+                    'X-Test' => '1'
+                ),
+                'timeout' => 5,
+                'sslverify' => false
+            );
+            
+            $response = wp_remote_request($url, $args);
+            if (!is_wp_error($response)) {
+                $headers = wp_remote_retrieve_headers($response);
+                error_log("Response headers: " . print_r($headers, true));
+                
+                // Check for GridPane cache headers
+                if (isset($headers['x-grid-cache-ttl'])) {
+                    error_log("Found GridPane FastCGI cache headers");
                     
-                    // Make a test request to check headers
-                    $site_host = parse_url(home_url(), PHP_URL_HOST);
-                    $url = home_url('/');
-                    error_log("Making test request to: " . $url);
-                    
-                    $args = array(
-                        'method' => 'GET',
-                        'headers' => array(
-                            'Host' => $site_host,
-                            'X-Test' => '1'
-                        ),
-                        'timeout' => 5,
-                        'sslverify' => false
+                    // FastCGI cache is enabled
+                    $result['active'] = true;
+                    $result['details'] = sprintf(
+                        __('GridPane FastCGI Page Cache | Status: %s', 'holler-cache-control'),
+                        isset($headers['x-grid-cache']) ? $headers['x-grid-cache'] : 'MISS'
                     );
                     
-                    $response = wp_remote_request($url, $args);
-                    if (!is_wp_error($response)) {
-                        $headers = wp_remote_retrieve_headers($response);
-                        error_log("Response headers: " . print_r($headers, true));
-                        
-                        $result['active'] = true;
-                        $result['details'] = sprintf(
-                            __('GridPane FastCGI Page Cache | Cache Size: %s | Status: %s', 'holler-cache-control'),
-                            size_format($size),
-                            isset($headers['x-grid-cache']) ? $headers['x-grid-cache'] : 'MISS'
-                        );
-                        
-                        // Add note about being logged in
-                        if (is_user_logged_in()) {
-                            $result['details'] .= ' ' . __('(Cache bypassed while logged in)', 'holler-cache-control');
-                        }
-                        
-                        error_log("Cache status: active (FastCGI)");
-                        return $result;
+                    // Add note about being logged in
+                    if (is_user_logged_in()) {
+                        $result['details'] .= ' ' . __('(Cache bypassed while logged in)', 'holler-cache-control');
                     }
+                    
+                    error_log("Cache status: active (FastCGI)");
+                    return $result;
                 }
-            } catch (\Exception $e) {
-                error_log('GridPane FastCGI cache error: ' . $e->getMessage());
             }
         }
         
@@ -84,7 +84,6 @@ class Nginx {
                 error_log("Redis memory usage: " . $used_memory . " bytes");
                 
                 // Make a test request to check headers
-                $site_host = parse_url(home_url(), PHP_URL_HOST);
                 $url = home_url('/');
                 error_log("Making test request to: " . $url);
                 
@@ -104,7 +103,7 @@ class Nginx {
                     error_log("Response headers: " . print_r($headers, true));
                     
                     // Check for GridPane Redis cache headers
-                    if (isset($headers['x-grid-cache-ttl'])) {
+                    if (isset($headers['x-grid-cache-ttl']) && !file_exists($nginx_conf)) {
                         error_log("Found GridPane Redis cache headers");
                         
                         // Redis is writable and Nginx is configured for page caching
