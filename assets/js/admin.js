@@ -110,54 +110,6 @@ jQuery(document).ready(function($) {
         );
     }
 
-    // Purge cache function
-    function purgeCache(cacheType, $button) {
-        console.log('Purging cache:', cacheType); // Debug log
-        const originalText = $button.text();
-        
-        $button.prop('disabled', true).text(hollerCacheControl.i18n.purging);
-        
-        $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {
-                action: 'holler_purge_' + cacheType,
-                type: cacheType,
-                _ajax_nonce: hollerCacheControl.nonces[cacheType]
-            },
-            success: function(response) {
-                console.log('Purge response:', response); // Debug log
-                if (response.success) {
-                    showNotice('Success: ' + response.data, 'success');
-                    $button.text(hollerCacheControl.i18n.purged);
-                } else {
-                    // Check if the message contains "cleared" or "purged" - these are actually successes
-                    const message = response.data.toLowerCase();
-                    if (message.includes('cleared') || message.includes('purged')) {
-                        showNotice(response.data, 'success');
-                        $button.text(hollerCacheControl.i18n.purged);
-                    } else {
-                        showNotice(hollerCacheControl.i18n.error + response.data, 'error');
-                        $button.text(originalText);
-                    }
-                }
-                
-                // Reset button text after delay
-                setTimeout(function() {
-                    $button.prop('disabled', false).text(originalText);
-                }, 2000);
-                
-                // Refresh cache status after purge
-                setTimeout(updateCacheStatus, 500);
-            },
-            error: function(xhr, status, error) {
-                console.error('Purge error:', error); // Debug log
-                showNotice(hollerCacheControl.i18n.error + error, 'error');
-                $button.prop('disabled', false).text(originalText);
-            }
-        });
-    }
-
     // Handle purge button clicks (both admin bar and tools page)
     function handlePurgeClick(e) {
         e.preventDefault();
@@ -225,29 +177,6 @@ jQuery(document).ready(function($) {
         purgeCache(cacheType, $(this));
     });
 
-    // Show admin notice
-    function showAdminNotice(message, type) {
-        var notice = $('<div class="notice notice-' + type + ' is-dismissible"><p>' + message + '</p></div>');
-        var $wrap = $('.wrap h1');
-        if ($wrap.length === 0) {
-            $wrap = $('#wpbody-content');
-        }
-        $wrap.after(notice);
-        
-        // Add dismiss button and functionality
-        var dismissButton = $('<button type="button" class="notice-dismiss"><span class="screen-reader-text">Dismiss this notice.</span></button>');
-        notice.append(dismissButton);
-        
-        dismissButton.on('click', function() {
-            notice.fadeOut(300, function() { $(this).remove(); });
-        });
-        
-        // Auto dismiss after 5 seconds
-        setTimeout(function() {
-            notice.fadeOut(300, function() { $(this).remove(); });
-        }, 5000);
-    }
-
     // Update cache status periodically
     function updateCacheStatus() {
         $.ajax({
@@ -282,6 +211,82 @@ jQuery(document).ready(function($) {
     // Start status updates if we're on the admin page
     if ($('.holler-cache-control-wrap').length) {
         updateCacheStatus();
+    }
+
+    // Purge cache function
+    function purgeCache(cacheType, $button) {
+        console.log('Purging cache:', cacheType);
+        const originalText = $button.text();
+        $button.prop('disabled', true).text(hollerCacheControl.i18n.purging);
+
+        // Get the correct nonce based on cache type
+        const nonce = hollerCacheControl.nonces[cacheType.replace('-', '_')];
+        if (!nonce) {
+            console.error('No nonce found for cache type:', cacheType);
+            showNotice('Error: Invalid cache type', 'error');
+            $button.prop('disabled', false).text(originalText);
+            return;
+        }
+
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'holler_purge_' + cacheType,
+                type: cacheType,
+                _ajax_nonce: nonce
+            },
+            success: function(response) {
+                console.log('Purge response:', response);
+                if (response.success) {
+                    showNotice(response.data, 'success');
+                } else {
+                    showNotice(response.data || 'Unknown error occurred', 'error');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.log('Purge error:', error);
+                showNotice(error || 'Failed to purge cache', 'error');
+            },
+            complete: function() {
+                $button.prop('disabled', false).text(originalText);
+                updateCacheStatus(); // Update status after purge
+            }
+        });
+    }
+
+    // Show admin notice
+    function showNotice(message, type) {
+        console.log('Showing notice:', message, type);
+        var notice = $('<div class="notice notice-' + type + ' is-dismissible"><p>' + message + '</p></div>');
+        
+        // Add dismiss button and functionality
+        var dismissButton = $('<button type="button" class="notice-dismiss"><span class="screen-reader-text">Dismiss this notice.</span></button>');
+        notice.append(dismissButton);
+        
+        dismissButton.on('click', function() {
+            notice.fadeOut(300, function() { $(this).remove(); });
+        });
+
+        // Different container based on admin/front-end
+        var $container;
+        if (hollerCacheControl.isAdmin) {
+            $container = $('.wrap h1');
+            if ($container.length === 0) {
+                $container = $('#wpbody-content');
+            }
+            $container.after(notice);
+        } else {
+            $container = $('#holler-cache-notice-container');
+            if ($container.length) {
+                $container.append(notice);
+            }
+        }
+        
+        // Auto dismiss after 5 seconds
+        setTimeout(function() {
+            notice.fadeOut(300, function() { $(this).remove(); });
+        }, 5000);
     }
 
     // Purge all caches function

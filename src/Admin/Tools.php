@@ -41,6 +41,11 @@ class Tools {
 
         // Add async cache purge hook
         add_action('holler_cache_control_async_purge', array($this, 'purge_all_caches'));
+
+        // Add notice container to front-end if admin bar is showing
+        if (!is_admin() && is_admin_bar_showing()) {
+            add_action('wp_footer', array($this, 'add_notice_container'));
+        }
     }
 
     /**
@@ -432,8 +437,67 @@ class Tools {
                 'redis' => wp_create_nonce('holler_purge_redis'),
                 'cloudflare' => wp_create_nonce('holler_purge_cloudflare'),
                 'cloudflare_apo' => wp_create_nonce('holler_purge_cloudflare_apo')
-            )
+            ),
+            'isAdmin' => is_admin()
         ));
+
+        // Add inline styles for front-end notices
+        if (!is_admin()) {
+            wp_add_inline_style('admin-bar', '
+                #holler-cache-notice-container {
+                    position: fixed;
+                    top: 32px;
+                    left: 0;
+                    right: 0;
+                    z-index: 99999;
+                }
+                #holler-cache-notice-container .notice {
+                    margin: 5px auto;
+                    max-width: 800px;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+                    position: relative;
+                    padding: 1px 40px 1px 12px;
+                    display: flex;
+                    align-items: center;
+                }
+                #holler-cache-notice-container .notice p {
+                    margin: 0.5em 0;
+                    padding: 2px;
+                    display: inline-block;
+                }
+                #holler-cache-notice-container .notice-success {
+                    border-left-color: #00a32a;
+                    background: #fff;
+                }
+                #holler-cache-notice-container .notice-error {
+                    border-left-color: #d63638;
+                    background: #fff;
+                }
+                #holler-cache-notice-container .notice-dismiss {
+                    position: absolute;
+                    top: 0;
+                    right: 1px;
+                    border: none;
+                    margin: 0;
+                    padding: 9px;
+                    background: none;
+                    color: #787c82;
+                    cursor: pointer;
+                }
+                #holler-cache-notice-container .notice-dismiss:before {
+                    content: "\\f153";
+                    font: normal 16px/20px dashicons;
+                }
+                #holler-cache-notice-container .notice-dismiss:hover {
+                    color: #d63638;
+                }
+                @media screen and (max-width: 782px) {
+                    #holler-cache-notice-container {
+                        top: 46px;
+                    }
+                }
+            ');
+        }
     }
 
     /**
@@ -783,5 +847,9 @@ class Tools {
 
     private function is_plugin_admin_page($hook) {
         return strpos($hook, 'holler-cache-control') !== false;
+    }
+
+    public function add_notice_container() {
+        echo '<div id="holler-cache-notice-container"></div>';
     }
 }
