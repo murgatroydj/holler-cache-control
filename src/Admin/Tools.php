@@ -81,89 +81,49 @@ class Tools {
     }
 
     /**
-     * Purge all caches when triggered by WordPress actions
+     * Purge all caches on plugin update/activation/deactivation
      */
     public function purge_all_caches_on_update() {
-        if (!current_user_can('manage_options')) {
+        // Skip cache purging during plugin deactivation if it's not our plugin
+        if (isset($_GET['action']) && $_GET['action'] === 'deactivate' && 
+            isset($_GET['plugin']) && strpos($_GET['plugin'], 'holler-cache-control') === false) {
             return;
         }
 
-        // Get cache status first to avoid unnecessary operations
-        $cache_status = self::get_cache_systems_status();
-
-        // Set longer timeout for potentially slow operations
-        $timeout = ini_get('max_execution_time');
-        set_time_limit(300); // 5 minutes
-
         try {
-            // Clear WordPress core caches
-            wp_cache_flush();
+            $cache_status = $this->get_cache_systems_status();
             
-            // Only clear post cache if we're in a post context
-            if (get_the_ID()) {
-                clean_post_cache(get_the_ID());
-            }
-
-            // Batch process term cache clearing
-            $terms = get_terms(array('hide_empty' => false, 'fields' => 'ids', 'number' => 100));
-            if (!is_wp_error($terms) && !empty($terms)) {
-                clean_term_cache($terms);
-            }
-
-            // Clear current user cache
-            if (is_user_logged_in()) {
-                clean_user_cache(get_current_user_id());
-            }
-
-            // Clear transients in batches
-            $this->delete_transient_cache();
-
-            // Clear Elementor caches if active
-            if (class_exists('\Elementor\Plugin')) {
-                $this->purge_elementor_cache();
-            }
-
-            // Clear Astra caches if active
-            if (defined('ASTRA_THEME_VERSION')) {
-                $this->purge_astra_cache();
-            }
-
-            // Purge Nginx cache if active
+            // Purge Nginx cache first as it's typically fastest
             if ($cache_status['nginx']['active']) {
-                $nginx_result = Nginx::purge_cache();
-                if (!$nginx_result['success']) {
-                    throw new \Exception($nginx_result['message']);
-                }
+                Nginx::purge_cache();
             }
 
-            // Purge Redis cache if active
+            // Skip other caches during plugin deactivation
+            if (isset($_GET['action']) && $_GET['action'] === 'deactivate') {
+                return;
+            }
+
+            // Purge Redis cache
             if ($cache_status['redis']['active']) {
-                $redis_result = Redis::purge_cache();
-                if (!$redis_result['success']) {
-                    throw new \Exception($redis_result['message']);
-                }
+                Redis::purge_cache();
             }
 
-            // Purge Cloudflare cache if active
+            // Purge Cloudflare cache
             if ($cache_status['cloudflare']['active']) {
-                $cloudflare_result = Cloudflare::purge_cache();
-                if (!$cloudflare_result['success']) {
-                    throw new \Exception($cloudflare_result['message']);
-                }
+                Cloudflare::purge_cache();
             }
 
-            // Purge Cloudflare APO cache if active
+            // Purge Cloudflare APO cache
             if ($cache_status['cloudflare-apo']['active']) {
-                $cloudflare_apo_result = CloudflareAPO::purge_cache();
-                if (!$cloudflare_apo_result['success']) {
-                    throw new \Exception($cloudflare_apo_result['message']);
-                }
+                CloudflareAPO::purge_cache();
             }
+
+            // Clear Elementor cache
+            $this->purge_elementor_cache();
+
         } catch (\Exception $e) {
+            // Log error but don't block deactivation
             error_log('Cache purge error: ' . $e->getMessage());
-        } finally {
-            // Restore original timeout
-            set_time_limit($timeout);
         }
     }
 
