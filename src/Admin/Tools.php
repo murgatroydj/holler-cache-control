@@ -20,6 +20,21 @@ class Tools {
         $this->plugin_name = $plugin_name;
         $this->version = $version;
 
+        // Initialize admin hooks
+        add_action('admin_init', array($this, 'admin_init'));
+        add_action('admin_menu', array($this, 'add_plugin_admin_menu'));
+        add_action('admin_enqueue_scripts', array($this, 'enqueue_styles'));
+        add_action('admin_enqueue_scripts', array($this, 'enqueue_scripts'));
+
+        // Initialize front-end hooks if admin bar is showing
+        if (!is_admin() && is_admin_bar_showing()) {
+            add_action('wp_enqueue_scripts', array($this, 'enqueue_scripts'));
+            add_action('wp_footer', array($this, 'add_notice_container'));
+        }
+
+        // Add async cache purge hook
+        add_action('holler_cache_control_async_purge', array($this, 'purge_all_caches'));
+
         // Add admin bar menu with high priority to ensure it runs after other plugins
         add_action('wp_before_admin_bar_render', array($this, 'remove_original_buttons'), 999);
         add_action('admin_bar_menu', array($this, 'admin_bar_menu'), 100);
@@ -32,20 +47,8 @@ class Tools {
         add_action('wp_ajax_holler_cache_control_status', array($this, 'handle_cache_status'));
         add_action('wp_ajax_holler_purge_nginx_cache', array($this, 'purge_nginx_cache'));
 
-        // Enqueue scripts for both admin and front-end when user is logged in
-        add_action('admin_enqueue_scripts', array($this, 'enqueue_assets'));
-        add_action('wp_enqueue_scripts', array($this, 'enqueue_assets'));
-
         // Add cache purging hooks
         $this->add_cache_purging_hooks();
-
-        // Add async cache purge hook
-        add_action('holler_cache_control_async_purge', array($this, 'purge_all_caches'));
-
-        // Add notice container to front-end if admin bar is showing
-        if (!is_admin() && is_admin_bar_showing()) {
-            add_action('wp_footer', array($this, 'add_notice_container'));
-        }
     }
 
     /**
@@ -413,8 +416,15 @@ class Tools {
      * Register the JavaScript for the admin area.
      */
     public function enqueue_scripts($hook) {
+        // Only load on our admin page or if admin bar is showing
         if (!$this->is_plugin_admin_page($hook) && !is_admin_bar_showing()) {
             return;
+        }
+
+        // Add ajaxurl for front-end
+        if (!is_admin()) {
+            wp_enqueue_script('jquery');
+            wp_add_inline_script('jquery', 'var ajaxurl = "' . admin_url('admin-ajax.php') . '";', 'before');
         }
 
         wp_enqueue_script(
@@ -443,7 +453,8 @@ class Tools {
 
         // Add inline styles for front-end notices
         if (!is_admin()) {
-            wp_add_inline_style('admin-bar', '
+            wp_enqueue_style('dashicons');
+            wp_add_inline_style('dashicons', '
                 #holler-cache-notice-container {
                     position: fixed;
                     top: 32px;
@@ -459,6 +470,8 @@ class Tools {
                     padding: 1px 40px 1px 12px;
                     display: flex;
                     align-items: center;
+                    background: #fff;
+                    border-left: 4px solid #72aee6;
                 }
                 #holler-cache-notice-container .notice p {
                     margin: 0.5em 0;
@@ -467,11 +480,9 @@ class Tools {
                 }
                 #holler-cache-notice-container .notice-success {
                     border-left-color: #00a32a;
-                    background: #fff;
                 }
                 #holler-cache-notice-container .notice-error {
                     border-left-color: #d63638;
-                    background: #fff;
                 }
                 #holler-cache-notice-container .notice-dismiss {
                     position: absolute;
@@ -485,10 +496,19 @@ class Tools {
                     cursor: pointer;
                 }
                 #holler-cache-notice-container .notice-dismiss:before {
+                    background: none;
+                    color: #787c82;
                     content: "\\f153";
+                    display: block;
                     font: normal 16px/20px dashicons;
+                    speak: never;
+                    height: 20px;
+                    text-align: center;
+                    width: 20px;
+                    -webkit-font-smoothing: antialiased;
+                    -moz-osx-font-smoothing: grayscale;
                 }
-                #holler-cache-notice-container .notice-dismiss:hover {
+                #holler-cache-notice-container .notice-dismiss:hover:before {
                     color: #d63638;
                 }
                 @media screen and (max-width: 782px) {
