@@ -19,6 +19,24 @@ class Cloudflare {
     }
 
     /**
+     * Get Cloudflare API email
+     * 
+     * @return string
+     */
+    private static function get_email() {
+        return defined('CLOUDFLARE_EMAIL') ? CLOUDFLARE_EMAIL : get_option('cloudflare_email');
+    }
+
+    /**
+     * Get Cloudflare API key
+     * 
+     * @return string
+     */
+    private static function get_api_key() {
+        return defined('CLOUDFLARE_API_KEY') ? CLOUDFLARE_API_KEY : get_option('cloudflare_api_key');
+    }
+
+    /**
      * Check if Cloudflare credentials are set
      * 
      * @return bool True if credentials are set, false otherwise
@@ -44,80 +62,19 @@ class Cloudflare {
         $credentials = self::get_credentials();
         error_log('Checking Cloudflare credentials - Zone ID: ' . $credentials['zone_id']);
 
-        // First verify the zone ID by listing all zones
-        $page = 1;
-        $zone_found = false;
-        $correct_zone_id = '';
+        // Get zone ID for the domain
+        $zone_id = self::get_zone_id($credentials['zone_id']);
 
-        while (true) {
-            $response = wp_remote_get(
-                "https://api.cloudflare.com/client/v4/zones?page={$page}&per_page=50",
-                array(
-                    'headers' => array(
-                        'X-Auth-Email' => $credentials['email'],
-                        'X-Auth-Key' => $credentials['api_key'],
-                        'Content-Type' => 'application/json'
-                    )
-                )
-            );
-
-            $zones_body = json_decode(wp_remote_retrieve_body($response), true);
-            error_log('Zones Response Page ' . $page . ': ' . print_r($zones_body, true));
-
-            if (is_wp_error($response)) {
-                error_log('Zones Error: ' . $response->get_error_message());
-                return array(
-                    'active' => false,
-                    'details' => $response->get_error_message()
-                );
-            }
-
-            if (empty($zones_body) || !isset($zones_body['success']) || !$zones_body['success']) {
-                error_log('Zones Error Response: ' . print_r($zones_body, true));
-                return array(
-                    'active' => false,
-                    'details' => isset($zones_body['errors'][0]['message']) ? $zones_body['errors'][0]['message'] : __('API Error', 'holler-cache-control')
-                );
-            }
-
-            // Find our zone in the list
-            if (!empty($zones_body['result'])) {
-                foreach ($zones_body['result'] as $zone) {
-                    error_log('Checking zone: ' . $zone['name'] . ' with ID: ' . $zone['id']);
-                    if ($zone['id'] === $credentials['zone_id']) {
-                        $zone_found = true;
-                        break 2; // Break out of both loops
-                    }
-                    // Also store the zone ID if the domain matches
-                    if (in_array($zone['name'], array('hollerdigital.com', 'www.hollerdigital.com'))) {
-                        $correct_zone_id = $zone['id'];
-                        break 2; // Break out of both loops
-                    }
-                }
-            }
-
-            // Check if we need to fetch more pages
-            if (empty($zones_body['result']) || 
-                !isset($zones_body['result_info']['total_pages']) || 
-                $page >= $zones_body['result_info']['total_pages']) {
-                break;
-            }
-            $page++;
-        }
-
-        if (!$zone_found && !empty($correct_zone_id)) {
-            error_log('Found correct zone ID: ' . $correct_zone_id . ' instead of: ' . $credentials['zone_id']);
-            // Update the zone ID in options
-            update_option('cloudflare_zone_id', $correct_zone_id);
+        if (empty($zone_id)) {
             return array(
                 'active' => false,
-                'details' => __('Zone ID updated. Please refresh the page.', 'holler-cache-control')
+                'details' => __('Zone not found', 'holler-cache-control')
             );
         }
 
         // Check zone status
         $response = wp_remote_get(
-            "https://api.cloudflare.com/client/v4/zones/{$credentials['zone_id']}",
+            "https://api.cloudflare.com/client/v4/zones/{$zone_id}",
             array(
                 'headers' => array(
                     'X-Auth-Email' => $credentials['email'],
@@ -145,7 +102,7 @@ class Cloudflare {
 
         // Get development mode status specifically
         $dev_mode_response = wp_remote_get(
-            "https://api.cloudflare.com/client/v4/zones/{$credentials['zone_id']}/settings/development_mode",
+            "https://api.cloudflare.com/client/v4/zones/{$zone_id}/settings/development_mode",
             array(
                 'headers' => array(
                     'X-Auth-Email' => $credentials['email'],
@@ -165,7 +122,7 @@ class Cloudflare {
 
         // Get cache level setting
         $cache_response = wp_remote_get(
-            "https://api.cloudflare.com/client/v4/zones/{$credentials['zone_id']}/settings/cache_level",
+            "https://api.cloudflare.com/client/v4/zones/{$zone_id}/settings/cache_level",
             array(
                 'headers' => array(
                     'X-Auth-Email' => $credentials['email'],
@@ -192,6 +149,98 @@ class Cloudflare {
         );
 
         return $status;
+    }
+
+    /**
+     * Get zone data from Cloudflare
+     * @return array
+     */
+    private static function get_zone_data() {
+        $api_key = self::get_api_key();
+        $email = self::get_email();
+        
+        if (empty($api_key) || empty($email)) {
+            return array();
+        }
+
+        $args = array(
+            'headers' => array(
+                'X-Auth-Email' => $email,
+                'X-Auth-Key' => $api_key,
+                'Content-Type' => 'application/json',
+            ),
+        );
+
+        // Get zones one page at a time to prevent memory issues
+        $page = 1;
+        $per_page = 20;
+        $zones = array();
+        
+        do {
+            $url = add_query_arg(
+                array(
+                    'page' => $page,
+                    'per_page' => $per_page,
+                    'status' => 'active'
+                ),
+                'https://api.cloudflare.com/client/v4/zones'
+            );
+            
+            $response = wp_remote_get($url, $args);
+            
+            if (is_wp_error($response)) {
+                break;
+            }
+            
+            $body = wp_remote_retrieve_body($response);
+            $data = json_decode($body, true);
+            
+            if (empty($data['success']) || empty($data['result'])) {
+                break;
+            }
+            
+            // Only store essential zone data
+            foreach ($data['result'] as $zone) {
+                $zones[] = array(
+                    'id' => $zone['id'],
+                    'name' => $zone['name'],
+                    'status' => $zone['status']
+                );
+            }
+            
+            // Free up memory
+            unset($data);
+            unset($body);
+            
+            if (count($data['result']) < $per_page) {
+                break;
+            }
+            
+            $page++;
+            
+            // Optional: Add a small delay to prevent rate limiting
+            usleep(100000); // 100ms delay
+            
+        } while (true);
+        
+        return $zones;
+    }
+
+    /**
+     * Get zone ID for a domain
+     * @param string $domain
+     * @return string|null
+     */
+    public static function get_zone_id($domain) {
+        $zones = self::get_zone_data();
+        
+        foreach ($zones as $zone) {
+            if ($zone['name'] === $domain && $zone['status'] === 'active') {
+                return $zone['id'];
+            }
+        }
+        
+        return null;
     }
 
     /**
