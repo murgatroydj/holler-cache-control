@@ -234,52 +234,20 @@ $using_constants = (
         <h2><?php _e('Plugin Settings', 'holler-cache-control'); ?></h2>
         
         <table class="form-table">
-            <!-- Nginx Cache Settings -->
-            <tr>
-                <th scope="row"><?php _e('Nginx Cache Settings', 'holler-cache-control'); ?></th>
-                <td>
-                    <fieldset>
-                        <label for="nginx_cache_method">
-                            <?php _e('Cache Method', 'holler-cache-control'); ?>
-                        </label>
-                        <select name="nginx_cache_method" id="nginx_cache_method">
-                            <option value="fastcgi" <?php selected(get_option('nginx_cache_method', 'fastcgi'), 'fastcgi'); ?>>
-                                <?php _e('FastCGI Cache', 'holler-cache-control'); ?>
-                            </option>
-                            <option value="redis" <?php selected(get_option('nginx_cache_method', 'fastcgi'), 'redis'); ?>>
-                                <?php _e('Redis Cache', 'holler-cache-control'); ?>
-                            </option>
-                        </select>
-                        <p class="description">
-                            <?php _e('Select the caching method used by Nginx.', 'holler-cache-control'); ?>
-                        </p>
-                    </fieldset>
-                </td>
-            </tr>
-
             <!-- Admin Bar Settings -->
             <tr>
                 <th scope="row"><?php _e('Admin Bar Settings', 'holler-cache-control'); ?></th>
                 <td>
                     <fieldset>
-                        <label>
-                            <input type="checkbox" 
-                                   name="hide_nginx_purge_button" 
-                                   value="1"
-                                   <?php checked(get_option('hide_nginx_purge_button', '0'), '1'); ?> />
-                            <?php _e('Hide Nginx Helper purge button', 'holler-cache-control'); ?>
+                        <label for="hide_nginx_purge_button">
+                            <input type="checkbox" name="hide_nginx_purge_button" id="hide_nginx_purge_button" value="1" <?php checked(get_option('hide_nginx_purge_button'), '1'); ?>>
+                            <?php _e('Hide Nginx Cache Purge Button', 'holler-cache-control'); ?>
                         </label>
                         <br>
-                        <label>
-                            <input type="checkbox" 
-                                   name="hide_redis_purge_button" 
-                                   value="1"
-                                   <?php checked(get_option('hide_redis_purge_button', '0'), '1'); ?> />
-                            <?php _e('Hide Redis Object Cache purge button', 'holler-cache-control'); ?>
+                        <label for="hide_redis_purge_button">
+                            <input type="checkbox" name="hide_redis_purge_button" id="hide_redis_purge_button" value="1" <?php checked(get_option('hide_redis_purge_button'), '1'); ?>>
+                            <?php _e('Hide Redis Cache Purge Button', 'holler-cache-control'); ?>
                         </label>
-                        <p class="description">
-                            <?php _e('Select which cache purge buttons to hide from the admin bar. The unified "Purge All Caches" button will still be available.', 'holler-cache-control'); ?>
-                        </p>
                     </fieldset>
                 </td>
             </tr>
