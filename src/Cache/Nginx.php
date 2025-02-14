@@ -19,52 +19,56 @@ class Nginx {
             'details' => ''
         );
 
-        // Check for Nginx Helper plugin which GridPane requires for page caching
-        if (!is_plugin_active('nginx-helper/nginx-helper.php')) {
-            $result['details'] = __('Nginx Helper plugin not active', 'holler-cache-control');
-            return $result;
-        }
+        // GridPane's configuration paths
+        $nginx_conf = '/etc/nginx/sites-enabled/' . parse_url(home_url(), PHP_URL_HOST);
+        $redis_conf = '/etc/nginx/conf.d/redis.conf';
+        $cache_path = '/var/cache/nginx';
 
-        // Get site customizer options from GridPane
-        $gridpane_options = get_option('gridpane_site_settings', array());
-        
         // Check if Redis page caching is enabled in GridPane
-        if (isset($gridpane_options['redis_page_cache']) && $gridpane_options['redis_page_cache'] == 1) {
-            try {
-                // Check if Redis is responding
-                $redis = new \Redis();
-                $redis->connect('127.0.0.1', 6379);
-                
-                if ($redis->ping()) {
-                    $info = $redis->info();
-                    $ttl = isset($gridpane_options['redis_page_cache_ttl']) ? $gridpane_options['redis_page_cache_ttl'] : 2592000;
-                    
-                    $result['active'] = true;
-                    $result['details'] = sprintf(
-                        __('GridPane Redis Page Cache | TTL: %s | Memory Used: %s', 'holler-cache-control'),
-                        human_time_diff(0, $ttl),
-                        size_format($info['used_memory'])
-                    );
-                    return $result;
+        if (file_exists($redis_conf)) {
+            $redis_config = file_get_contents($redis_conf);
+            if (strpos($redis_config, 'srcache_store_pass') !== false) {
+                try {
+                    $redis = new \Redis();
+                    if ($redis->connect('127.0.0.1', 6379)) {
+                        $info = $redis->info();
+                        
+                        // Count GridPane page cache keys
+                        $page_keys = 0;
+                        $iterator = null;
+                        while ($keys = $redis->scan($iterator, 'nginx-cache:*', 100)) {
+                            $page_keys += count($keys);
+                        }
+                        
+                        $result['active'] = true;
+                        $result['details'] = sprintf(
+                            __('GridPane Redis Page Cache | Memory: %s | Cache Keys: %d', 'holler-cache-control'),
+                            size_format($info['used_memory']),
+                            $page_keys
+                        );
+                        return $result;
+                    }
+                } catch (\Exception $e) {
+                    error_log('GridPane Redis Page Cache error: ' . $e->getMessage());
                 }
-            } catch (\Exception $e) {
-                error_log('GridPane Redis Page Cache error: ' . $e->getMessage());
             }
         }
 
-        // Check if FastCGI cache is enabled
-        $cache_path = '/var/cache/nginx';
-        if (is_dir($cache_path)) {
-            try {
-                $size = self::get_directory_size($cache_path);
-                $result['active'] = true;
-                $result['details'] = sprintf(
-                    __('GridPane FastCGI Page Cache | Cache Size: %s', 'holler-cache-control'),
-                    size_format($size)
-                );
-                return $result;
-            } catch (\Exception $e) {
-                error_log('GridPane FastCGI cache error: ' . $e->getMessage());
+        // Check if FastCGI caching is enabled
+        if (file_exists($nginx_conf) && is_dir($cache_path)) {
+            $nginx_config = file_get_contents($nginx_conf);
+            if (strpos($nginx_config, 'fastcgi_cache_use_stale') !== false) {
+                try {
+                    $size = self::get_directory_size($cache_path);
+                    $result['active'] = true;
+                    $result['details'] = sprintf(
+                        __('GridPane FastCGI Page Cache | Cache Size: %s', 'holler-cache-control'),
+                        size_format($size)
+                    );
+                    return $result;
+                } catch (\Exception $e) {
+                    error_log('GridPane FastCGI cache error: ' . $e->getMessage());
+                }
             }
         }
 
@@ -83,48 +87,49 @@ class Nginx {
             'message' => ''
         );
 
-        // Check for Nginx Helper plugin
-        if (!is_plugin_active('nginx-helper/nginx-helper.php')) {
-            $result['message'] = __('Nginx Helper plugin not active', 'holler-cache-control');
-            return $result;
-        }
-
         try {
-            // Get site customizer options from GridPane
-            $gridpane_options = get_option('gridpane_site_settings', array());
-            
-            if (isset($gridpane_options['redis_page_cache']) && $gridpane_options['redis_page_cache'] == 1) {
-                // Purge Redis Page Cache
-                $redis = new \Redis();
-                $redis->connect('127.0.0.1', 6379);
-                
-                // Use SCAN instead of KEYS for better performance
-                $iterator = null;
-                $pattern = 'nginx-cache:*';
-                while ($keys = $redis->scan($iterator, $pattern, 100)) {
-                    foreach ($keys as $key) {
-                        $redis->del($key);
+            // GridPane's configuration paths
+            $redis_conf = '/etc/nginx/conf.d/redis.conf';
+            $cache_path = '/var/cache/nginx';
+
+            // Check if Redis page caching is enabled
+            if (file_exists($redis_conf)) {
+                $redis_config = file_get_contents($redis_conf);
+                if (strpos($redis_config, 'srcache_store_pass') !== false) {
+                    $redis = new \Redis();
+                    if (!$redis->connect('127.0.0.1', 6379)) {
+                        throw new \Exception(__('Could not connect to Redis server', 'holler-cache-control'));
                     }
+
+                    // Purge GridPane's Redis page cache
+                    $iterator = null;
+                    $pattern = 'nginx-cache:*';
+                    while ($keys = $redis->scan($iterator, $pattern, 100)) {
+                        foreach ($keys as $key) {
+                            $redis->del($key);
+                        }
+                    }
+
+                    $result['success'] = true;
+                    $result['message'] = __('GridPane Redis Page Cache purged successfully', 'holler-cache-control');
+                    return $result;
+                }
+            }
+
+            // Check if FastCGI cache exists
+            if (is_dir($cache_path)) {
+                exec('rm -rf ' . escapeshellarg($cache_path . '/*'), $output, $return_var);
+                
+                if ($return_var !== 0) {
+                    throw new \Exception(__('Failed to purge GridPane FastCGI Page Cache', 'holler-cache-control'));
                 }
                 
                 $result['success'] = true;
-                $result['message'] = __('GridPane Redis Page Cache purged successfully', 'holler-cache-control');
-            } else {
-                // Purge FastCGI Cache
-                $cache_path = '/var/cache/nginx';
-                if (is_dir($cache_path)) {
-                    exec('rm -rf ' . escapeshellarg($cache_path . '/*'), $output, $return_var);
-                    
-                    if ($return_var !== 0) {
-                        throw new \Exception(__('Failed to purge GridPane FastCGI Page Cache', 'holler-cache-control'));
-                    }
-                    
-                    $result['success'] = true;
-                    $result['message'] = __('GridPane FastCGI Page Cache purged successfully', 'holler-cache-control');
-                } else {
-                    throw new \Exception(__('Page Caching is disabled in GridPane', 'holler-cache-control'));
-                }
+                $result['message'] = __('GridPane FastCGI Page Cache purged successfully', 'holler-cache-control');
+                return $result;
             }
+
+            throw new \Exception(__('Page Caching is disabled in GridPane', 'holler-cache-control'));
         } catch (\Exception $e) {
             error_log('GridPane page cache purge error: ' . $e->getMessage());
             $result['message'] = $e->getMessage();
