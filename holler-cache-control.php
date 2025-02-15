@@ -35,10 +35,9 @@ define('HOLLER_CACHE_CONTROL_VERSION', '1.2.0');
 $plugin_update_checker_file = plugin_dir_path(__FILE__) . 'vendor/plugin-update-checker/plugin-update-checker.php';
 if (file_exists($plugin_update_checker_file)) {
     require_once $plugin_update_checker_file;
-    use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
 
-    // Setup the update checker
-    $updateChecker = PucFactory::buildUpdateChecker(
+    // Setup the update checker for public repository
+    $updateChecker = \YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
         'https://github.com/HollerDigital/holler-cache-control',
         __FILE__,
         'holler-cache-control'
@@ -47,35 +46,8 @@ if (file_exists($plugin_update_checker_file)) {
     // Set the branch that contains the stable release
     $updateChecker->setBranch('master');
 
-    // Enable GitHub authentication for private repository
-    $updateChecker->setAuthentication(get_option('holler_cache_github_token', ''));
-
-    // Optional: Enable Releases instead of just tags
+    // Enable Releases instead of just tags
     $updateChecker->getVcsApi()->enableReleaseAssets();
-
-    // Add settings field for GitHub token if not exists
-    add_action('admin_init', function() {
-        register_setting('holler-cache-control', 'holler_cache_github_token');
-        add_settings_section(
-            'holler_cache_github_section',
-            __('GitHub Integration', 'holler-cache-control'),
-            function() {
-                echo '<p>' . __('Settings for GitHub repository integration.', 'holler-cache-control') . '</p>';
-            },
-            'holler-cache-control'
-        );
-        add_settings_field(
-            'holler_cache_github_token',
-            __('GitHub Token', 'holler-cache-control'),
-            function() {
-                $token = get_option('holler_cache_github_token', '');
-                echo '<input type="password" id="holler_cache_github_token" name="holler_cache_github_token" value="' . esc_attr($token) . '" class="regular-text">';
-                echo '<p class="description">' . __('Enter a GitHub token with read access to the repository.', 'holler-cache-control') . '</p>';
-            },
-            'holler-cache-control',
-            'holler_cache_github_section'
-        );
-    });
 }
 
 // Load required files - these need to be loaded before the autoloader
