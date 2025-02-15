@@ -141,35 +141,24 @@ class Nginx {
                 throw new \Exception(__('Page Caching is not active', 'holler-cache-control'));
             }
 
-            // Different purge methods based on cache type
-            if ($status['type'] === 'redis') {
-                // Clear Redis cache using wp-cli
-                $command = 'wp redis flush';
-                $output = shell_exec($command . ' 2>&1');
-                
-                if ($output === null) {
-                    throw new \Exception(__('Failed to execute Redis flush command', 'holler-cache-control'));
-                }
-            } else if ($status['type'] === 'nginx') {
-                // Clear Nginx cache by removing cache files
-                $cache_dir = '/var/cache/nginx';
-                if (!is_dir($cache_dir)) {
-                    throw new \Exception(__('Nginx cache directory not found', 'holler-cache-control'));
-                }
+            // Use GridPane's cache clearing command
+            $site_url = parse_url(home_url(), PHP_URL_HOST);
+            $command = 'gp fix cached ' . escapeshellarg($site_url) . ' 2>&1';
+            
+            // Execute with sudo since GridPane commands typically need elevated privileges
+            $output = shell_exec('sudo ' . $command);
+            
+            if ($output === null) {
+                throw new \Exception(__('Failed to execute GridPane cache clear command', 'holler-cache-control'));
+            }
 
-                // Use shell command to remove cache files
-                $command = 'rm -rf ' . escapeshellarg($cache_dir . '/*');
-                $output = shell_exec($command . ' 2>&1');
-
-                if ($output !== null && !empty($output)) {
-                    throw new \Exception(sprintf(__('Failed to clear Nginx cache: %s', 'holler-cache-control'), $output));
-                }
-            } else {
-                throw new \Exception(__('Unknown cache type', 'holler-cache-control'));
+            // Check for error messages in output
+            if (stripos($output, 'error') !== false || stripos($output, 'failed') !== false) {
+                throw new \Exception(sprintf(__('GridPane cache clear failed: %s', 'holler-cache-control'), $output));
             }
 
             $result['success'] = true;
-            $result['message'] = sprintf(__('%s Cache cleared successfully', 'holler-cache-control'), ucfirst($status['type']));
+            $result['message'] = __('Cache cleared successfully via GridPane', 'holler-cache-control');
             
         } catch (\Exception $e) {
             $result['message'] = $e->getMessage();
