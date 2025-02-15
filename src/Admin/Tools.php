@@ -30,6 +30,7 @@ class Tools {
 
         // Add admin bar menu
         add_action('admin_bar_menu', array($this, 'admin_bar_menu'), 100);
+        add_action('admin_bar_menu', array($this, 'remove_original_buttons'), 999);
 
         // Register AJAX handlers
         add_action('wp_ajax_holler_cache_control_status', array($this, 'handle_cache_status'));
@@ -56,6 +57,7 @@ class Tools {
         if (!is_admin() && is_admin_bar_showing()) {
             add_action('wp_enqueue_scripts', array($this, 'enqueue_scripts'));
             add_action('wp_footer', array($this, 'add_notice_container'));
+            add_action('admin_bar_menu', array($this, 'remove_original_buttons'), 999);
         }
     }
 
@@ -730,12 +732,14 @@ class Tools {
         
         // Remove Nginx Helper button if setting enabled
         if (get_option('hide_nginx_purge_button', '0') === '1') {
+            $wp_admin_bar->remove_node('nginx-helper');
             $wp_admin_bar->remove_node('nginx-helper-purge-all');
         }
         
         // Remove Redis Object Cache button if setting enabled
         if (get_option('hide_redis_purge_button', '0') === '1') {
             $wp_admin_bar->remove_node('redis-cache');
+            $wp_admin_bar->remove_node('redis-cache-info');
         }
     }
 
