@@ -806,29 +806,22 @@ class Tools {
         $wp_admin_bar->add_menu(array(
             'parent' => 'holler-cache-control',
             'id' => 'holler-cache-separator',
-            'title' => ''
+            'title' => '─────────────'
         ));
 
         // Add purge cache menu
         $wp_admin_bar->add_menu(array(
             'parent' => 'holler-cache-control',
             'id' => 'holler-purge-cache',
-            'title' => __('Purge Cache', 'holler-cache-control')
+            'title' => __('Purge Caches', 'holler-cache-control')
         ));
 
-        // Add purge all option first
+        // Add purge all option
         $wp_admin_bar->add_menu(array(
             'parent' => 'holler-purge-cache',
             'id' => 'holler-purge-all',
             'title' => '<a href="#" class="holler-purge-cache" data-cache-type="all">' . 
                       __('Purge All Caches', 'holler-cache-control') . '</a>'
-        ));
-
-        // Add separator after purge all
-        $wp_admin_bar->add_menu(array(
-            'parent' => 'holler-purge-cache',
-            'id' => 'holler-purge-separator',
-            'title' => ''
         ));
 
         // Only show individual purge buttons for active caching services
@@ -872,7 +865,7 @@ class Tools {
         $wp_admin_bar->add_menu(array(
             'parent' => 'holler-cache-control',
             'id' => 'holler-cache-separator-2',
-            'title' => ''
+            'title' => '─────────────'
         ));
 
         // Add settings link
