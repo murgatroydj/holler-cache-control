@@ -741,8 +741,8 @@ class Tools {
         }
 
         // Get settings
-        $hide_nginx = get_option('hide_nginx_purge_button', false);
-        $hide_redis = get_option('hide_redis_purge_button', false);
+        $hide_nginx = get_option('hide_nginx_purge_button', 'no') === 'yes';
+        $hide_redis = get_option('hide_redis_purge_button', 'no') === 'yes';
 
         // Get cache statuses
         $nginx_status = \HollerCacheControl\Cache\Nginx::get_status();
@@ -812,14 +812,14 @@ class Tools {
             'title' => ''
         ));
 
-        // Add purge cache submenu
+        // Add purge cache menu
         $wp_admin_bar->add_menu(array(
             'parent' => 'holler-cache-control',
             'id' => 'holler-purge-cache',
             'title' => __('Purge Cache', 'holler-cache-control')
         ));
 
-        // Add purge all caches option first
+        // Add purge all option first
         $wp_admin_bar->add_menu(array(
             'parent' => 'holler-purge-cache',
             'id' => 'holler-purge-all',
@@ -871,7 +871,7 @@ class Tools {
             ));
         }
 
-        // Add another separator
+        // Add separator
         $wp_admin_bar->add_menu(array(
             'parent' => 'holler-cache-control',
             'id' => 'holler-cache-separator-2',

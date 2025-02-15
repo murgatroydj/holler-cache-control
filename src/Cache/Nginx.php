@@ -53,6 +53,27 @@ class Nginx {
             }
         }
         
+        // Check for standard Nginx cache headers
+        $nginx_headers = array(
+            'x-nginx-cache',
+            'x-fastcgi-cache',
+            'x-proxy-cache'
+        );
+        
+        $has_nginx_headers = false;
+        foreach ($nginx_headers as $header) {
+            if (isset($headers_array[$header])) {
+                $has_nginx_headers = true;
+                $result['active'] = true;
+                $result['type'] = 'nginx';
+                $result['details'] = sprintf(
+                    __('Nginx Page Caching (Status: %s)', 'holler-cache-control'),
+                    $headers_array[$header]
+                );
+                return $result;
+            }
+        }
+        
         // Check for Redis cache headers
         $redis_headers = array(
             'x-grid-srcache-ttl',
@@ -87,6 +108,15 @@ class Nginx {
                 );
             }
             
+            return $result;
+        }
+
+        // If no cache headers found, check if cache directory exists and is writable
+        $cache_dir = '/var/cache/nginx';
+        if (is_dir($cache_dir) && is_writable($cache_dir)) {
+            $result['active'] = true;
+            $result['type'] = 'nginx';
+            $result['details'] = __('Nginx Page Caching Enabled', 'holler-cache-control');
             return $result;
         }
         
