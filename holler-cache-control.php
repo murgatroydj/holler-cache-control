@@ -28,6 +28,23 @@ if (!defined('WPINC')) {
     die;
 }
 
+// Include the plugin update checker
+require_once plugin_dir_path(__FILE__) . 'vendor/plugin-update-checker/plugin-update-checker.php';
+use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
+
+// Setup the update checker
+$updateChecker = PucFactory::buildUpdateChecker(
+    'https://github.com/murgatroydj/holler-cache-control/',
+    __FILE__,
+    'holler-cache-control'
+);
+
+// Set the branch that contains the stable release
+$updateChecker->setBranch('master');
+
+// Optional: Enable Releases instead of just tags
+$updateChecker->getVcsApi()->enableReleaseAssets();
+
 // Define plugin version
 define('HOLLER_CACHE_CONTROL_VERSION', '1.2.0');
 

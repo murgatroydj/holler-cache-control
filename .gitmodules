@@ -1,0 +1,3 @@
+[submodule "vendor/plugin-update-checker"]
+	path = vendor/plugin-update-checker
+	url = https://github.com/YahnisElsts/plugin-update-checker.git
