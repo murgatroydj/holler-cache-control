@@ -574,7 +574,8 @@ class Tools {
      * Handle AJAX request to get cache status
      */
     public function handle_cache_status() {
-        check_ajax_referer('holler_cache_status', '_wpnonce');
+        // Check nonce without specifying the field name
+        check_ajax_referer('holler_cache_status');
 
         if (!current_user_can('manage_options')) {
             wp_send_json_error(__('You do not have permission to perform this action.', 'holler-cache-control'));
