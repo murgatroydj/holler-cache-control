@@ -820,26 +820,32 @@ class Tools {
         $wp_admin_bar->add_menu(array(
             'parent' => 'holler-purge-cache',
             'id' => 'holler-purge-all',
-            'title' => '<a href="#" class="holler-purge-cache" data-cache-type="all">' . 
-                      __('Purge All Caches', 'holler-cache-control') . '</a>'
+            'title' => sprintf(
+                '<a href="#" class="holler-purge-cache" data-cache-type="all">%s</a>',
+                __('Purge All Caches', 'holler-cache-control')
+            )
         ));
 
         // Only show individual purge buttons for active caching services
-        if ($nginx_status['active'] && !$hide_nginx) {
+        if ($nginx_status['active']) {
             $wp_admin_bar->add_menu(array(
                 'parent' => 'holler-purge-cache',
                 'id' => 'holler-purge-nginx',
-                'title' => '<a href="#" class="holler-purge-cache" data-cache-type="nginx">' . 
-                          __('Purge Nginx Page Cache', 'holler-cache-control') . '</a>'
+                'title' => sprintf(
+                    '<a href="#" class="holler-purge-cache" data-cache-type="nginx">%s</a>',
+                    __('Purge Nginx Page Cache', 'holler-cache-control')
+                )
             ));
         }
 
-        if ($redis_status['active'] && !$hide_redis) {
+        if ($redis_status['active']) {
             $wp_admin_bar->add_menu(array(
                 'parent' => 'holler-purge-cache',
                 'id' => 'holler-purge-redis',
-                'title' => '<a href="#" class="holler-purge-cache" data-cache-type="redis">' . 
-                          __('Purge Redis Object Cache', 'holler-cache-control') . '</a>'
+                'title' => sprintf(
+                    '<a href="#" class="holler-purge-cache" data-cache-type="redis">%s</a>',
+                    __('Purge Redis Object Cache', 'holler-cache-control')
+                )
             ));
         }
 
@@ -847,8 +853,10 @@ class Tools {
             $wp_admin_bar->add_menu(array(
                 'parent' => 'holler-purge-cache',
                 'id' => 'holler-purge-cloudflare',
-                'title' => '<a href="#" class="holler-purge-cache" data-cache-type="cloudflare">' . 
-                          __('Purge Cloudflare Cache', 'holler-cache-control') . '</a>'
+                'title' => sprintf(
+                    '<a href="#" class="holler-purge-cache" data-cache-type="cloudflare">%s</a>',
+                    __('Purge Cloudflare Cache', 'holler-cache-control')
+                )
             ));
         }
 
@@ -856,8 +864,10 @@ class Tools {
             $wp_admin_bar->add_menu(array(
                 'parent' => 'holler-purge-cache',
                 'id' => 'holler-purge-cloudflare-apo',
-                'title' => '<a href="#" class="holler-purge-cache" data-cache-type="cloudflare-apo">' . 
-                          __('Purge Cloudflare APO', 'holler-cache-control') . '</a>'
+                'title' => sprintf(
+                    '<a href="#" class="holler-purge-cache" data-cache-type="cloudflare-apo">%s</a>',
+                    __('Purge Cloudflare APO', 'holler-cache-control')
+                )
             ));
         }
 
