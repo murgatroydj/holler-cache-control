@@ -732,162 +732,92 @@ class Tools {
         }
     }
 
+    /**
+     * Add the admin bar menu
+     */
     public function admin_bar_menu($wp_admin_bar) {
         if (!current_user_can('manage_options')) {
             return;
         }
 
-        // Get cache statuses
-        $nginx_status = \HollerCacheControl\Cache\Nginx::get_status();
-        $redis_status = \HollerCacheControl\Cache\Redis::get_status();
-        $cloudflare_status = \HollerCacheControl\Cache\Cloudflare::get_status();
-        $cloudflare_apo_status = \HollerCacheControl\Cache\CloudflareAPO::get_status();
+        // Get settings
+        $hide_nginx = get_option('hide_nginx_purge_button', false);
+        $hide_redis = get_option('hide_redis_purge_button', false);
 
-        // Add main menu item
-        $wp_admin_bar->add_menu(array(
+        // Add the parent menu
+        $wp_admin_bar->add_node(array(
             'id' => 'holler-cache-control',
             'title' => __('Cache Control', 'holler-cache-control'),
             'href' => admin_url('admin.php?page=holler-cache-control')
         ));
 
-        // Add cache status submenu
-        $wp_admin_bar->add_menu(array(
-            'parent' => 'holler-cache-control',
-            'id' => 'holler-cache-status',
-            'title' => __('Cache Status', 'holler-cache-control')
-        ));
-
-        // Add individual cache status items
-        $wp_admin_bar->add_menu(array(
-            'parent' => 'holler-cache-status',
-            'id' => 'holler-nginx-status',
-            'title' => sprintf(
-                __('Nginx Page Cache: %s', 'holler-cache-control'),
-                $nginx_status['active'] ? '✅' : '❌'
-            )
-        ));
-
-        $wp_admin_bar->add_menu(array(
-            'parent' => 'holler-cache-status',
-            'id' => 'holler-redis-status',
-            'title' => sprintf(
-                __('Redis Object Cache: %s', 'holler-cache-control'),
-                $redis_status['active'] ? '✅' : '❌'
-            )
-        ));
-
-        if ($cloudflare_status['active']) {
-            $wp_admin_bar->add_menu(array(
-                'parent' => 'holler-cache-status',
-                'id' => 'holler-cloudflare-status',
-                'title' => sprintf(
-                    __('Cloudflare Cache: %s', 'holler-cache-control'),
-                    $cloudflare_status['active'] ? '✅' : '❌'
-                )
-            ));
-        }
-
-        if ($cloudflare_apo_status['active']) {
-            $wp_admin_bar->add_menu(array(
-                'parent' => 'holler-cache-status',
-                'id' => 'holler-cloudflare-apo-status',
-                'title' => sprintf(
-                    __('Cloudflare APO: %s', 'holler-cache-control'),
-                    $cloudflare_apo_status['active'] ? '✅' : '❌'
-                )
-            ));
-        }
-
-        // Add separator
-        $wp_admin_bar->add_menu(array(
-            'parent' => 'holler-cache-control',
-            'id' => 'holler-cache-separator',
-            'title' => ''
-        ));
-
-        // Add purge cache submenu
-        $wp_admin_bar->add_menu(array(
-            'parent' => 'holler-cache-control',
-            'id' => 'holler-purge-cache',
-            'title' => __('Purge Cache', 'holler-cache-control')
-        ));
-
-        // Add purge all caches option first
-        $nonce = wp_create_nonce('holler_purge_all');
-        $wp_admin_bar->add_menu(array(
-            'parent' => 'holler-purge-cache',
+        // Add "Purge All" as the first option
+        $wp_admin_bar->add_node(array(
             'id' => 'holler-purge-all',
-            'title' => '<a href="#" class="holler-purge-cache" data-cache-type="all">' . 
-                      __('Purge All Caches', 'holler-cache-control') . '</a>' .
-                      '<input type="hidden" id="holler-all-nonce" value="' . esc_attr($nonce) . '">'
+            'title' => __('Purge All Caches', 'holler-cache-control'),
+            'parent' => 'holler-cache-control',
+            'href' => '#',
+            'meta' => array(
+                'class' => 'holler-purge-cache',
+                'data-cache-type' => 'all'
+            )
         ));
 
-        // Add separator after purge all
-        $wp_admin_bar->add_menu(array(
-            'parent' => 'holler-purge-cache',
-            'id' => 'holler-purge-separator',
-            'title' => ''
-        ));
-
-        // Only show individual purge buttons for active caching services
-        if ($nginx_status['active']) {
-            $nonce = wp_create_nonce('holler_purge_nginx');
-            $wp_admin_bar->add_menu(array(
-                'parent' => 'holler-purge-cache',
+        // Add Nginx cache purge button if not hidden
+        if (!$hide_nginx) {
+            $wp_admin_bar->add_node(array(
                 'id' => 'holler-purge-nginx',
-                'title' => '<a href="#" class="holler-purge-cache" data-cache-type="nginx">' . 
-                          __('Purge Nginx Page Cache', 'holler-cache-control') . '</a>' .
-                          '<input type="hidden" id="holler-nginx-nonce" value="' . esc_attr($nonce) . '">'
+                'title' => __('Purge Page Cache', 'holler-cache-control'),
+                'parent' => 'holler-cache-control',
+                'href' => '#',
+                'meta' => array(
+                    'class' => 'holler-purge-cache',
+                    'data-cache-type' => 'nginx'
+                )
             ));
         }
 
-        if ($redis_status['active']) {
-            $nonce = wp_create_nonce('holler_purge_redis');
-            $wp_admin_bar->add_menu(array(
-                'parent' => 'holler-purge-cache',
+        // Add Redis cache purge button if not hidden
+        if (!$hide_redis) {
+            $wp_admin_bar->add_node(array(
                 'id' => 'holler-purge-redis',
-                'title' => '<a href="#" class="holler-purge-cache" data-cache-type="redis">' . 
-                          __('Purge Redis Object Cache', 'holler-cache-control') . '</a>' .
-                          '<input type="hidden" id="holler-redis-nonce" value="' . esc_attr($nonce) . '">'
+                'title' => __('Purge Object Cache', 'holler-cache-control'),
+                'parent' => 'holler-cache-control',
+                'href' => '#',
+                'meta' => array(
+                    'class' => 'holler-purge-cache',
+                    'data-cache-type' => 'redis'
+                )
             ));
         }
 
-        if ($cloudflare_status['active']) {
-            $nonce = wp_create_nonce('holler_purge_cloudflare');
-            $wp_admin_bar->add_menu(array(
-                'parent' => 'holler-purge-cache',
+        // Add Cloudflare cache purge button if configured
+        if (\HollerCacheControl\Cache\Cloudflare::is_configured()) {
+            $wp_admin_bar->add_node(array(
                 'id' => 'holler-purge-cloudflare',
-                'title' => '<a href="#" class="holler-purge-cache" data-cache-type="cloudflare">' . 
-                          __('Purge Cloudflare Cache', 'holler-cache-control') . '</a>' .
-                          '<input type="hidden" id="holler-cloudflare-nonce" value="' . esc_attr($nonce) . '">'
+                'title' => __('Purge Cloudflare Cache', 'holler-cache-control'),
+                'parent' => 'holler-cache-control',
+                'href' => '#',
+                'meta' => array(
+                    'class' => 'holler-purge-cache',
+                    'data-cache-type' => 'cloudflare'
+                )
             ));
+
+            // Add Cloudflare APO purge button if APO is enabled
+            if (\HollerCacheControl\Cache\CloudflareAPO::is_configured()) {
+                $wp_admin_bar->add_node(array(
+                    'id' => 'holler-purge-cloudflare-apo',
+                    'title' => __('Purge Cloudflare APO', 'holler-cache-control'),
+                    'parent' => 'holler-cache-control',
+                    'href' => '#',
+                    'meta' => array(
+                        'class' => 'holler-purge-cache',
+                        'data-cache-type' => 'cloudflare-apo'
+                    )
+                ));
+            }
         }
-
-        if ($cloudflare_apo_status['active']) {
-            $nonce = wp_create_nonce('holler_purge_cloudflare_apo');
-            $wp_admin_bar->add_menu(array(
-                'parent' => 'holler-purge-cache',
-                'id' => 'holler-purge-cloudflare-apo',
-                'title' => '<a href="#" class="holler-purge-cache" data-cache-type="cloudflare-apo">' . 
-                          __('Purge Cloudflare APO', 'holler-cache-control') . '</a>' .
-                          '<input type="hidden" id="holler-cloudflare-apo-nonce" value="' . esc_attr($nonce) . '">'
-            ));
-        }
-
-        // Add another separator
-        $wp_admin_bar->add_menu(array(
-            'parent' => 'holler-cache-control',
-            'id' => 'holler-cache-separator-2',
-            'title' => ''
-        ));
-
-        // Add settings link
-        $wp_admin_bar->add_menu(array(
-            'parent' => 'holler-cache-control',
-            'id' => 'holler-cache-settings',
-            'title' => __('Settings', 'holler-cache-control'),
-            'href' => admin_url('admin.php?page=holler-cache-control')
-        ));
     }
 
     private function is_plugin_admin_page($hook) {
