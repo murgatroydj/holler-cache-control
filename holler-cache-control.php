@@ -8,9 +8,9 @@
  *
  * @wordpress-plugin
  * Plugin Name:       Holler Cache Control
- * Plugin URI:        https://github.com/hollerdigital/holler-cache-control
- * Description:       Advanced cache control for WordPress sites running on GridPane with Redis, Nginx, and Cloudflare.
- * Version:           1.2.0
+ * Plugin URI:        https://github.com/murgatroydj/holler-cache-control
+ * Description:       Advanced cache control for WordPress sites with Nginx and Redis caching
+ * Version:           1.2.1
  * Author:            Holler Digital
  * Author URI:        https://hollerdigital.com
  * License:           GPL-2.0+
@@ -73,7 +73,7 @@ add_action('admin_init', function() {
 });
 
 // Define plugin version
-define('HOLLER_CACHE_CONTROL_VERSION', '1.2.0');
+define('HOLLER_CACHE_CONTROL_VERSION', '1.2.1');
 
 // Load required files - these need to be loaded before the autoloader
 require_once plugin_dir_path(__FILE__) . 'src/Core/Loader.php';
