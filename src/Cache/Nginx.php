@@ -141,16 +141,35 @@ class Nginx {
                 throw new \Exception(__('Page Caching is not active', 'holler-cache-control'));
             }
 
-            // Clear Redis cache using wp-cli
-            $command = 'wp redis flush';
-            $output = shell_exec($command . ' 2>&1');
-            
-            if ($output === null) {
-                throw new \Exception(__('Failed to execute Redis flush command', 'holler-cache-control'));
+            // Different purge methods based on cache type
+            if ($status['type'] === 'redis') {
+                // Clear Redis cache using wp-cli
+                $command = 'wp redis flush';
+                $output = shell_exec($command . ' 2>&1');
+                
+                if ($output === null) {
+                    throw new \Exception(__('Failed to execute Redis flush command', 'holler-cache-control'));
+                }
+            } else if ($status['type'] === 'nginx') {
+                // Clear Nginx cache by removing cache files
+                $cache_dir = '/var/cache/nginx';
+                if (!is_dir($cache_dir)) {
+                    throw new \Exception(__('Nginx cache directory not found', 'holler-cache-control'));
+                }
+
+                // Use shell command to remove cache files
+                $command = 'rm -rf ' . escapeshellarg($cache_dir . '/*');
+                $output = shell_exec($command . ' 2>&1');
+
+                if ($output !== null && !empty($output)) {
+                    throw new \Exception(sprintf(__('Failed to clear Nginx cache: %s', 'holler-cache-control'), $output));
+                }
+            } else {
+                throw new \Exception(__('Unknown cache type', 'holler-cache-control'));
             }
 
             $result['success'] = true;
-            $result['message'] = __('Page Cache cleared successfully', 'holler-cache-control');
+            $result['message'] = sprintf(__('%s Cache cleared successfully', 'holler-cache-control'), ucfirst($status['type']));
             
         } catch (\Exception $e) {
             $result['message'] = $e->getMessage();
