@@ -28,61 +28,98 @@ if (!defined('WPINC')) {
     die;
 }
 
-// Include the plugin update checker
-require_once plugin_dir_path(__FILE__) . 'vendor/plugin-update-checker/plugin-update-checker.php';
-use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
-
-// Setup the update checker
-$updateChecker = PucFactory::buildUpdateChecker(
-    'https://github.com/HollerDigital/holler-cache-control',
-    __FILE__,
-    'holler-cache-control'
-);
-
-// Set the branch that contains the stable release
-$updateChecker->setBranch('master');
-
-// Enable GitHub authentication for private repository
-$updateChecker->setAuthentication(get_option('holler_cache_github_token', ''));
-
-// Optional: Enable Releases instead of just tags
-$updateChecker->getVcsApi()->enableReleaseAssets();
-
-// Add settings field for GitHub token if not exists
-add_action('admin_init', function() {
-    register_setting('holler-cache-control', 'holler_cache_github_token');
-    add_settings_section(
-        'holler_cache_github_section',
-        __('GitHub Integration', 'holler-cache-control'),
-        function() {
-            echo '<p>' . __('Settings for GitHub repository integration.', 'holler-cache-control') . '</p>';
-        },
-        'holler-cache-control'
-    );
-    add_settings_field(
-        'holler_cache_github_token',
-        __('GitHub Token', 'holler-cache-control'),
-        function() {
-            $token = get_option('holler_cache_github_token', '');
-            echo '<input type="password" id="holler_cache_github_token" name="holler_cache_github_token" value="' . esc_attr($token) . '" class="regular-text">';
-            echo '<p class="description">' . __('Enter a GitHub token with read access to the repository.', 'holler-cache-control') . '</p>';
-        },
-        'holler-cache-control',
-        'holler_cache_github_section'
-    );
-});
-
 // Define plugin version
 define('HOLLER_CACHE_CONTROL_VERSION', '1.2.0');
 
+// Try to include the plugin update checker if it exists
+$plugin_update_checker_file = plugin_dir_path(__FILE__) . 'vendor/plugin-update-checker/plugin-update-checker.php';
+if (file_exists($plugin_update_checker_file)) {
+    require_once $plugin_update_checker_file;
+    use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
+
+    // Setup the update checker
+    $updateChecker = PucFactory::buildUpdateChecker(
+        'https://github.com/HollerDigital/holler-cache-control',
+        __FILE__,
+        'holler-cache-control'
+    );
+
+    // Set the branch that contains the stable release
+    $updateChecker->setBranch('master');
+
+    // Enable GitHub authentication for private repository
+    $updateChecker->setAuthentication(get_option('holler_cache_github_token', ''));
+
+    // Optional: Enable Releases instead of just tags
+    $updateChecker->getVcsApi()->enableReleaseAssets();
+
+    // Add settings field for GitHub token if not exists
+    add_action('admin_init', function() {
+        register_setting('holler-cache-control', 'holler_cache_github_token');
+        add_settings_section(
+            'holler_cache_github_section',
+            __('GitHub Integration', 'holler-cache-control'),
+            function() {
+                echo '<p>' . __('Settings for GitHub repository integration.', 'holler-cache-control') . '</p>';
+            },
+            'holler-cache-control'
+        );
+        add_settings_field(
+            'holler_cache_github_token',
+            __('GitHub Token', 'holler-cache-control'),
+            function() {
+                $token = get_option('holler_cache_github_token', '');
+                echo '<input type="password" id="holler_cache_github_token" name="holler_cache_github_token" value="' . esc_attr($token) . '" class="regular-text">';
+                echo '<p class="description">' . __('Enter a GitHub token with read access to the repository.', 'holler-cache-control') . '</p>';
+            },
+            'holler-cache-control',
+            'holler_cache_github_section'
+        );
+    });
+}
+
 // Load required files - these need to be loaded before the autoloader
-require_once plugin_dir_path(__FILE__) . 'src/Core/Loader.php';
-require_once plugin_dir_path(__FILE__) . 'src/Core/Plugin.php';
-require_once plugin_dir_path(__FILE__) . 'src/Admin/Tools.php';
-require_once plugin_dir_path(__FILE__) . 'src/Cache/Nginx.php';
-require_once plugin_dir_path(__FILE__) . 'src/Cache/Redis.php';
-require_once plugin_dir_path(__FILE__) . 'src/Cache/Cloudflare.php';
-require_once plugin_dir_path(__FILE__) . 'src/Cache/CloudflareAPO.php';
+$required_files = array(
+    'src/Core/Loader.php',
+    'src/Core/Plugin.php',
+    'src/Admin/Tools.php',
+    'src/Cache/Nginx.php',
+    'src/Cache/Redis.php',
+    'src/Cache/Cloudflare.php',
+    'src/Cache/CloudflareAPO.php'
+);
+
+// Check if all required files exist
+$missing_files = array();
+foreach ($required_files as $file) {
+    $file_path = plugin_dir_path(__FILE__) . $file;
+    if (!file_exists($file_path)) {
+        $missing_files[] = $file;
+    }
+}
+
+// If any required files are missing, show admin notice and return
+if (!empty($missing_files)) {
+    add_action('admin_notices', function() use ($missing_files) {
+        ?>
+        <div class="notice notice-error">
+            <p><?php _e('Holler Cache Control plugin is missing required files:', 'holler-cache-control'); ?></p>
+            <ul>
+                <?php foreach ($missing_files as $file): ?>
+                    <li><?php echo esc_html($file); ?></li>
+                <?php endforeach; ?>
+            </ul>
+            <p><?php _e('Please reinstall the plugin or contact support.', 'holler-cache-control'); ?></p>
+        </div>
+        <?php
+    });
+    return;
+}
+
+// Load all required files
+foreach ($required_files as $file) {
+    require_once plugin_dir_path(__FILE__) . $file;
+}
 
 // Register autoloader for any additional plugin classes
 spl_autoload_register(function ($class) {
@@ -102,8 +139,8 @@ spl_autoload_register(function ($class) {
     // Replace namespace separators with directory separators
     $file = $base_dir . str_replace('\\', '/', $relative_class) . '.php';
 
-    // If the file exists and hasn't been loaded yet, require it
-    if (file_exists($file) && !class_exists($class)) {
+    // If the file exists, require it
+    if (file_exists($file)) {
         require $file;
     }
 });
@@ -114,15 +151,6 @@ spl_autoload_register(function ($class) {
  * @since    1.0.0
  */
 function run_holler_cache_control() {
-    // Register activation hook
-    register_activation_hook(__FILE__, function() {
-        // Register our async action if not already registered
-        if (!wp_next_scheduled('holler_cache_control_async_purge')) {
-            wp_schedule_single_event(time(), 'holler_cache_control_async_purge');
-        }
-    });
-
-    // Initialize plugin
     $plugin = new HollerCacheControl\Core\Plugin();
     $plugin->run();
 }
