@@ -607,15 +607,35 @@ class Tools {
         $type = sanitize_text_field($_POST['type']);
         $result = array('success' => false, 'message' => '');
 
-        // If type is 'all', purge all caches in specific order
+        // If type is 'all', purge all active caches in specific order
         if ($type === 'all') {
-            // Define cache types in specific order
-            $caches = array(
-                'redis',           // 1. Clear Redis object cache first
-                'nginx',           // 2. Clear Nginx page cache second
-                'cloudflare',      // 3. Clear Cloudflare cache last
-                'cloudflare-apo'   // 4. Clear Cloudflare APO last
+            // Get status of all caches
+            $statuses = array(
+                'redis' => \HollerCacheControl\Cache\Redis::get_status(),
+                'nginx' => \HollerCacheControl\Cache\Nginx::get_status(),
+                'cloudflare' => \HollerCacheControl\Cache\Cloudflare::get_status(),
+                'cloudflare-apo' => \HollerCacheControl\Cache\CloudflareAPO::get_status()
             );
+            
+            // Define cache types in specific order, but only include active ones
+            $caches = array();
+            if ($statuses['redis']['active']) {
+                $caches[] = 'redis';           // 1. Clear Redis object cache first
+            }
+            if ($statuses['nginx']['active']) {
+                $caches[] = 'nginx';           // 2. Clear Nginx page cache second
+            }
+            if ($statuses['cloudflare']['active']) {
+                $caches[] = 'cloudflare';      // 3. Clear Cloudflare cache last
+            }
+            if ($statuses['cloudflare-apo']['active']) {
+                $caches[] = 'cloudflare-apo';  // 4. Clear Cloudflare APO last
+            }
+            
+            if (empty($caches)) {
+                wp_send_json_error(__('No active caches found to purge.', 'holler-cache-control'));
+                return;
+            }
             
             $success = true;
             $messages = array();
