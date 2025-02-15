@@ -264,7 +264,7 @@ jQuery(document).ready(function($) {
                 url: ajaxurl,
                 type: 'POST',
                 data: {
-                    action: 'holler_cache_status',
+                    action: 'holler_cache_control_status',
                     _wpnonce: hollerCacheControl.nonces.status
                 },
                 success: function(response) {

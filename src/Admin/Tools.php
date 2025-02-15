@@ -32,7 +32,7 @@ class Tools {
         add_action('admin_bar_menu', array($this, 'admin_bar_menu'), 100);
 
         // Register AJAX handlers
-        add_action('wp_ajax_holler_cache_status', array($this, 'handle_cache_status'));
+        add_action('wp_ajax_holler_cache_control_status', array($this, 'handle_cache_status'));
         add_action('wp_ajax_holler_purge_all', array($this, 'handle_purge_cache'));
         add_action('wp_ajax_holler_purge_nginx', array($this, 'handle_purge_cache'));
         add_action('wp_ajax_holler_purge_redis', array($this, 'handle_purge_cache'));
@@ -449,7 +449,7 @@ class Tools {
                 'updating' => __('Updating...', 'holler-cache-control')
             ),
             'nonces' => array(
-                'status' => wp_create_nonce('holler_cache_status'),
+                'status' => wp_create_nonce('holler_cache_control_status'),
                 'all' => wp_create_nonce('holler_purge_all'),
                 'nginx' => wp_create_nonce('holler_purge_nginx'),
                 'redis' => wp_create_nonce('holler_purge_redis'),
@@ -575,7 +575,7 @@ class Tools {
      */
     public function handle_cache_status() {
         // Check nonce without specifying the field name
-        check_ajax_referer('holler_cache_status');
+        check_ajax_referer('holler_cache_control_status');
 
         if (!current_user_can('manage_options')) {
             wp_send_json_error(__('You do not have permission to perform this action.', 'holler-cache-control'));

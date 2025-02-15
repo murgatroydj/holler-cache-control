@@ -166,9 +166,9 @@
 }
 
 #wp-admin-bar-holler-cache-control .ab-item {
-    height: auto !important;
+    /* height: auto !important;
     line-height: 2em !important;
-    padding: 0 12px !important;
+    padding: 0 12px !important; */
 }
 
 /* Separator styles */
