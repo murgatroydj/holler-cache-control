@@ -607,9 +607,16 @@ class Tools {
         $type = sanitize_text_field($_POST['type']);
         $result = array('success' => false, 'message' => '');
 
-        // If type is 'all', purge all caches
+        // If type is 'all', purge all caches in specific order
         if ($type === 'all') {
-            $caches = array('nginx', 'redis', 'cloudflare', 'cloudflare-apo');
+            // Define cache types in specific order
+            $caches = array(
+                'redis',           // 1. Clear Redis object cache first
+                'nginx',           // 2. Clear Nginx page cache second
+                'cloudflare',      // 3. Clear Cloudflare cache last
+                'cloudflare-apo'   // 4. Clear Cloudflare APO last
+            );
+            
             $success = true;
             $messages = array();
 
@@ -624,7 +631,7 @@ class Tools {
             }
             
             if ($success) {
-                wp_send_json_success(__('All caches cleared successfully', 'holler-cache-control'));
+                wp_send_json_success(implode("\n", $messages));
             } else {
                 wp_send_json_error(implode("\n", $messages));
             }
