@@ -141,108 +141,50 @@ class Nginx {
                 throw new \Exception(__('Page Caching is not active', 'holler-cache-control'));
             }
 
-            // Get list of URLs to purge
-            $urls_to_purge = array();
+            // Try to find the WP-CLI binary
+            $wp_cli = trim(shell_exec('which wp'));
+            if (empty($wp_cli)) {
+                $wp_cli = '/usr/local/bin/wp';
+            }
             
-            // Add home URL
-            $urls_to_purge[] = home_url('/');
-            
-            // Add current page URL if we're on a specific page
-            if (isset($_SERVER['HTTP_REFERER'])) {
-                $urls_to_purge[] = $_SERVER['HTTP_REFERER'];
+            if (!file_exists($wp_cli)) {
+                throw new \Exception(__('WP-CLI not found. Please ensure it is installed.', 'holler-cache-control'));
             }
 
-            // Add recent posts URLs
-            $recent_posts = get_posts(array(
-                'numberposts' => 10,
-                'post_type' => 'any',
-                'post_status' => 'publish'
-            ));
-
-            foreach ($recent_posts as $post) {
-                $urls_to_purge[] = get_permalink($post->ID);
-            }
-
-            // Add archive URLs
-            $urls_to_purge[] = get_post_type_archive_link('post');
+            // Get the WordPress root path
+            $wp_root = ABSPATH;
             
-            // Make the URLs unique
-            $urls_to_purge = array_unique($urls_to_purge);
-
-            $purged = 0;
-            $errors = array();
-
-            // Purge each URL
-            foreach ($urls_to_purge as $url) {
-                $purge_result = self::purge_url($url);
-                if ($purge_result === true) {
-                    $purged++;
-                } else {
-                    $errors[] = $purge_result;
-                }
+            // Build and execute the command
+            $command = sprintf(
+                'cd %s && %s cache flush',
+                escapeshellarg($wp_root),
+                escapeshellarg($wp_cli)
+            );
+            
+            $output = shell_exec($command . ' 2>&1');
+            
+            if ($output === null) {
+                throw new \Exception(__('Failed to execute cache flush command', 'holler-cache-control'));
             }
 
-            if ($purged > 0) {
-                $result['success'] = true;
-                $result['message'] = sprintf(
-                    __('Successfully purged cache for %d URLs', 'holler-cache-control'),
-                    $purged
+            // Also try to clear nginx cache directory
+            $nginx_cache_dir = '/var/cache/nginx';
+            if (is_dir($nginx_cache_dir)) {
+                $clear_nginx = sprintf(
+                    'rm -rf %s/*',
+                    escapeshellarg($nginx_cache_dir)
                 );
-                if (!empty($errors)) {
-                    $result['message'] .= '. ' . sprintf(
-                        __('Errors occurred while purging %d URLs', 'holler-cache-control'),
-                        count($errors)
-                    );
-                }
-            } else {
-                throw new \Exception(__('Failed to purge any URLs', 'holler-cache-control'));
+                shell_exec($clear_nginx . ' 2>/dev/null');
             }
+
+            $result['success'] = true;
+            $result['message'] = __('Cache cleared successfully', 'holler-cache-control');
             
         } catch (\Exception $e) {
             $result['message'] = $e->getMessage();
         }
 
         return $result;
-    }
-
-    /**
-     * Purge cache for a specific URL
-     *
-     * @param string $url The URL to purge
-     * @return true|string True on success, error message on failure
-     */
-    private static function purge_url($url) {
-        // Send a purge request to the URL
-        $args = array(
-            'method' => 'PURGE',
-            'headers' => array(
-                'Host' => parse_url($url, PHP_URL_HOST),
-                'X-Purge-Method' => 'default'
-            ),
-            'timeout' => 5,
-            'redirection' => 0,
-            'httpversion' => '1.1',
-            'sslverify' => false
-        );
-
-        $response = wp_remote_request($url, $args);
-
-        if (is_wp_error($response)) {
-            return $response->get_error_message();
-        }
-
-        $response_code = wp_remote_retrieve_response_code($response);
-        
-        // Any 2xx status code is considered success
-        if ($response_code >= 200 && $response_code < 300) {
-            return true;
-        }
-
-        return sprintf(
-            __('Failed to purge URL %s (Status: %d)', 'holler-cache-control'),
-            $url,
-            $response_code
-        );
     }
 
     /**
