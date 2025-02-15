@@ -53,6 +53,16 @@ class Cloudflare {
     }
 
     /**
+     * Check if Cloudflare is configured
+     */
+    public static function is_configured() {
+        $api_token = get_option('cloudflare_api_token');
+        $zone_id = get_option('cloudflare_zone_id');
+        
+        return !empty($api_token) && !empty($zone_id);
+    }
+
+    /**
      * Get Cloudflare status
      *
      * @return array
@@ -155,6 +165,18 @@ class Cloudflare {
         );
 
         return $status;
+    }
+
+    /**
+     * Get Cloudflare cache status
+     */
+    public static function get_cache_status() {
+        return array(
+            'active' => self::is_configured(),
+            'message' => self::is_configured() 
+                ? __('Cloudflare cache is active', 'holler-cache-control')
+                : __('Cloudflare credentials not configured', 'holler-cache-control')
+        );
     }
 
     /**

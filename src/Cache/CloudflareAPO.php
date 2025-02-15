@@ -6,6 +6,20 @@ namespace HollerCacheControl\Cache;
  */
 class CloudflareAPO {
     /**
+     * Check if Cloudflare APO is configured
+     */
+    public static function is_configured() {
+        // APO requires base Cloudflare to be configured first
+        if (!\HollerCacheControl\Cache\Cloudflare::is_configured()) {
+            return false;
+        }
+
+        // Check if APO is enabled
+        $apo_enabled = get_option('cloudflare_apo_enabled', false);
+        return !empty($apo_enabled);
+    }
+
+    /**
      * Get APO status
      *
      * @return array
