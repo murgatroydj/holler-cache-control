@@ -141,44 +141,112 @@ class Nginx {
                 throw new \Exception(__('Page Caching is not active', 'holler-cache-control'));
             }
 
-            // Try to find the WP-CLI binary
-            $wp_cli = trim(shell_exec('which wp'));
-            if (empty($wp_cli)) {
-                $wp_cli = '/usr/local/bin/wp';
+            // Get all public post types
+            $post_types = get_post_types(array('public' => true));
+            
+            // Get URLs to purge
+            $urls_to_purge = array();
+            
+            // Add home URL and site URL
+            $urls_to_purge[] = home_url('/');
+            $urls_to_purge[] = site_url('/');
+            
+            // Add post type archive URLs
+            foreach ($post_types as $post_type) {
+                $archive_url = get_post_type_archive_link($post_type);
+                if ($archive_url) {
+                    $urls_to_purge[] = $archive_url;
+                }
             }
             
-            if (!file_exists($wp_cli)) {
-                throw new \Exception(__('WP-CLI not found. Please ensure it is installed.', 'holler-cache-control'));
+            // Add recent posts URLs
+            $recent_posts = get_posts(array(
+                'posts_per_page' => 10,
+                'post_type' => $post_types,
+                'post_status' => 'publish'
+            ));
+            
+            foreach ($recent_posts as $post) {
+                $urls_to_purge[] = get_permalink($post->ID);
+            }
+            
+            // Add taxonomy archive URLs
+            $taxonomies = get_taxonomies(array('public' => true));
+            foreach ($taxonomies as $taxonomy) {
+                $terms = get_terms(array(
+                    'taxonomy' => $taxonomy,
+                    'hide_empty' => true,
+                    'number' => 10
+                ));
+                
+                foreach ($terms as $term) {
+                    $urls_to_purge[] = get_term_link($term);
+                }
+            }
+            
+            // Add author archive URLs
+            $authors = get_users(array(
+                'has_published_posts' => true,
+                'number' => 10
+            ));
+            
+            foreach ($authors as $author) {
+                $urls_to_purge[] = get_author_posts_url($author->ID);
+            }
+            
+            // Make URLs unique
+            $urls_to_purge = array_unique($urls_to_purge);
+            
+            // Initialize counters
+            $success_count = 0;
+            $error_count = 0;
+            
+            // Send purge requests
+            foreach ($urls_to_purge as $url) {
+                $purge_url = add_query_arg('purge_cache', '1', $url);
+                
+                $response = wp_remote_get($purge_url, array(
+                    'timeout' => 0.01,
+                    'blocking' => false,
+                    'sslverify' => false,
+                    'headers' => array(
+                        'X-Purge-Method' => 'get',
+                        'X-Purge-Host' => parse_url($url, PHP_URL_HOST)
+                    )
+                ));
+                
+                if (!is_wp_error($response)) {
+                    $success_count++;
+                } else {
+                    $error_count++;
+                }
             }
 
-            // Get the WordPress root path
-            $wp_root = ABSPATH;
+            // Also try to clear the object cache
+            wp_cache_flush();
             
-            // Build and execute the command
-            $command = sprintf(
-                'cd %s && %s cache flush',
-                escapeshellarg($wp_root),
-                escapeshellarg($wp_cli)
-            );
+            // Try to clear any transients
+            global $wpdb;
+            $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_%'");
+            $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_site_transient_%'");
             
-            $output = shell_exec($command . ' 2>&1');
-            
-            if ($output === null) {
-                throw new \Exception(__('Failed to execute cache flush command', 'holler-cache-control'));
-            }
-
-            // Also try to clear nginx cache directory
-            $nginx_cache_dir = '/var/cache/nginx';
-            if (is_dir($nginx_cache_dir)) {
-                $clear_nginx = sprintf(
-                    'rm -rf %s/*',
-                    escapeshellarg($nginx_cache_dir)
+            // Set success message
+            if ($success_count > 0) {
+                $result['success'] = true;
+                $result['message'] = sprintf(
+                    __('Successfully purged %d URLs', 'holler-cache-control'),
+                    $success_count
                 );
-                shell_exec($clear_nginx . ' 2>/dev/null');
+                
+                if ($error_count > 0) {
+                    $result['message'] .= sprintf(
+                        __('. Failed to purge %d URLs', 'holler-cache-control'),
+                        $error_count
+                    );
+                }
+            } else {
+                throw new \Exception(__('Failed to purge any URLs', 'holler-cache-control'));
             }
-
-            $result['success'] = true;
-            $result['message'] = __('Cache cleared successfully', 'holler-cache-control');
             
         } catch (\Exception $e) {
             $result['message'] = $e->getMessage();
