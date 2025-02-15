@@ -271,12 +271,15 @@ jQuery(document).ready(function($) {
                     if (response.success) {
                         Object.keys(response.data).forEach(function(type) {
                             var status = response.data[type];
-                            var $statusElement = $('#holler-' + type + '-status');
+                            var $statusElement = $('#holler-' + type.replace('_', '-') + '-status');
                             if ($statusElement.length) {
                                 $statusElement.html(status.active ? '✅' : '❌');
                             }
                         });
                     }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Status update error:', error);
                 }
             });
         }

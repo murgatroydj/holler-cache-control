@@ -571,8 +571,26 @@ class Tools {
     }
 
     /**
-     * Handle AJAX request to purge cache
+     * Handle AJAX request to get cache status
      */
+    public function handle_cache_status() {
+        check_ajax_referer('holler_cache_status', '_wpnonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(__('You do not have permission to perform this action.', 'holler-cache-control'));
+            return;
+        }
+
+        $statuses = array(
+            'nginx' => \HollerCacheControl\Cache\Nginx::get_status(),
+            'redis' => \HollerCacheControl\Cache\Redis::get_status(),
+            'cloudflare' => \HollerCacheControl\Cache\Cloudflare::get_status(),
+            'cloudflare_apo' => \HollerCacheControl\Cache\CloudflareAPO::get_status()
+        );
+
+        wp_send_json_success($statuses);
+    }
+
     public function handle_purge_cache() {
         check_ajax_referer('holler_purge_' . $_POST['type']);
 
@@ -650,30 +668,6 @@ class Tools {
         }
 
         return $result;
-    }
-
-    /**
-     * Handle AJAX request for cache status
-     */
-    public function handle_cache_status() {
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error(__('You do not have permission to perform this action.', 'holler-cache-control'));
-            return;
-        }
-
-        if (!check_ajax_referer('holler_cache_status', '_ajax_nonce', false)) {
-            wp_send_json_error(__('Invalid security token.', 'holler-cache-control'));
-            return;
-        }
-
-        $statuses = array(
-            'nginx' => \HollerCacheControl\Cache\Nginx::get_status(),
-            'redis' => \HollerCacheControl\Cache\Redis::get_status(),
-            'cloudflare' => \HollerCacheControl\Cache\Cloudflare::get_status(),
-            'cloudflare_apo' => \HollerCacheControl\Cache\CloudflareAPO::get_status()
-        );
-
-        wp_send_json_success($statuses);
     }
 
     public function purge_nginx_cache() {
