@@ -34,7 +34,7 @@ use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
 
 // Setup the update checker
 $updateChecker = PucFactory::buildUpdateChecker(
-    'https://github.com/murgatroydj/holler-cache-control/',
+    'https://github.com/HollerDigital/holler-cache-control',
     __FILE__,
     'holler-cache-control'
 );
