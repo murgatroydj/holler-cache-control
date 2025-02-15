@@ -29,8 +29,8 @@ class Tools {
         add_action('init', array($this, 'init_front_end'));
 
         // Add admin bar menu
+        add_action('admin_bar_menu', array($this, 'remove_original_buttons'), 11);
         add_action('admin_bar_menu', array($this, 'admin_bar_menu'), 100);
-        add_action('admin_bar_menu', array($this, 'remove_original_buttons'), 999);
 
         // Register AJAX handlers
         add_action('wp_ajax_holler_cache_control_status', array($this, 'handle_cache_status'));
@@ -57,7 +57,7 @@ class Tools {
         if (!is_admin() && is_admin_bar_showing()) {
             add_action('wp_enqueue_scripts', array($this, 'enqueue_scripts'));
             add_action('wp_footer', array($this, 'add_notice_container'));
-            add_action('admin_bar_menu', array($this, 'remove_original_buttons'), 999);
+            add_action('admin_bar_menu', array($this, 'remove_original_buttons'), 11);
         }
     }
 
