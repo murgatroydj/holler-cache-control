@@ -356,8 +356,11 @@ class Tools {
             'holler_cache_control_settings',
             'hide_nginx_purge_button',
             array(
-                'type' => 'boolean',
-                'default' => false
+                'type' => 'string',
+                'default' => '0',
+                'sanitize_callback' => function($value) {
+                    return $value === '1' ? '1' : '0';
+                }
             )
         );
 
@@ -365,8 +368,11 @@ class Tools {
             'holler_cache_control_settings',
             'hide_redis_purge_button',
             array(
-                'type' => 'boolean',
-                'default' => false
+                'type' => 'string',
+                'default' => '0',
+                'sanitize_callback' => function($value) {
+                    return $value === '1' ? '1' : '0';
+                }
             )
         );
 
@@ -742,8 +748,8 @@ class Tools {
         }
 
         // Get settings
-        $hide_nginx = get_option('hide_nginx_purge_button', 'no') === 'yes';
-        $hide_redis = get_option('hide_redis_purge_button', 'no') === 'yes';
+        $hide_nginx = get_option('hide_nginx_purge_button', '0') === '1';
+        $hide_redis = get_option('hide_redis_purge_button', '0') === '1';
 
         // Get cache statuses
         $nginx_status = \HollerCacheControl\Cache\Nginx::get_status();
