@@ -8,8 +8,8 @@
  *
  * @wordpress-plugin
  * Plugin Name:       Holler Cache Control
- * Plugin URI:        https://hollerdigital.com
- * Description:       Control and purge various caching systems including Nginx, Redis, and Cloudflare
+ * Plugin URI:        https://github.com/hollerdigital/holler-cache-control
+ * Description:       Advanced cache control for WordPress sites running on GridPane with Redis, Nginx, and Cloudflare.
  * Version:           1.2.0
  * Author:            Holler Digital
  * Author URI:        https://hollerdigital.com
@@ -17,6 +17,10 @@
  * License URI:       http://www.gnu.org/licenses/gpl-2.0.txt
  * Text Domain:       holler-cache-control
  * Domain Path:       /languages
+ * GitHub Plugin URI: hollerdigital/holler-cache-control
+ * GitHub Branch:     master
+ * Requires PHP:      7.4
+ * Requires at least: 5.0
  */
 
 // If this file is called directly, abort.
